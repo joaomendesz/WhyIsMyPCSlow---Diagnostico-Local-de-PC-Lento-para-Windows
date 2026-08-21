@@ -59,6 +59,8 @@ Implemented in this phase:
   - Memory Hog
   - Low Disk Space
 - Human-readable findings, evidence, impact, confidence and recommendations.
+- Local SQLite history for completed diagnostics.
+- History page with previous sessions, primary findings and evidence details.
 - Automated tests for formatting, process names, aggregation and diagnostic rules.
 
 Implementado nesta fase:
@@ -79,6 +81,8 @@ Implementado nesta fase:
   - Processo consumindo muita memoria
   - Pouco espaco em disco
 - Findings com texto humano, evidencias, impacto, confianca e recomendacoes.
+- Historico local em SQLite para diagnosticos concluidos.
+- Pagina de historico com sessoes anteriores, findings principais e detalhes de evidencias.
 - Testes automatizados para formatacao, nomes de processos, agregacao e regras.
 
 ## Tech Stack / Tecnologias
@@ -93,6 +97,7 @@ Implementado nesta fase:
 - Recharts
 - Zod
 - systeminformation
+- node:sqlite
 - Vitest
 - ESLint
 - electron-builder
@@ -111,6 +116,8 @@ Sample Aggregator
 Diagnostic Engine v1
       |
 Findings + Evidence + Recommendations
+      |
+SQLite HistoryRepository
       |
 Secure Electron IPC
       |
@@ -162,6 +169,44 @@ RAM at 91%
 + top process using a large share of memory
 = stronger memory pressure evidence
 ```
+
+## Local History / Historico Local
+
+Completed diagnostics are saved automatically in a local SQLite database stored under Electron's `userData` directory. The renderer never receives a generic SQL API. It can only call safe history commands:
+
+- List diagnostic sessions.
+- Open one diagnostic detail.
+- Clear local history.
+
+Each saved session stores:
+
+- Analysis date.
+- Diagnostic status.
+- Primary finding title.
+- Impact.
+- Confidence.
+- Sample count.
+- Duration.
+- Engine version.
+- Full diagnostic summary JSON.
+
+Os diagnosticos concluidos sao salvos automaticamente em um banco SQLite local dentro do diretorio `userData` do Electron. O renderer nunca recebe uma API SQL generica. Ele so pode chamar comandos seguros de historico:
+
+- Listar sessoes de diagnostico.
+- Abrir o detalhe de uma sessao.
+- Limpar o historico local.
+
+Cada sessao salva armazena:
+
+- Data da analise.
+- Status do diagnostico.
+- Titulo do finding principal.
+- Impacto.
+- Confianca.
+- Numero de amostras.
+- Duracao.
+- Versao do motor.
+- JSON completo do resumo diagnostico.
 
 ## Diagnostic Rules v1 / Regras de Diagnostico v1
 
@@ -265,6 +310,9 @@ The preload exposes:
 - `window.whyPcSlow.diagnostics.cancel`
 - `window.whyPcSlow.diagnostics.onProgress`
 - `window.whyPcSlow.diagnostics.onFinished`
+- `window.whyPcSlow.history.list`
+- `window.whyPcSlow.history.get`
+- `window.whyPcSlow.history.clear`
 
 ## Metric Sources / Fontes de Metricas
 
@@ -288,6 +336,8 @@ src/
   utils/
 
 src-electron/
+  database/
+    historyRepository.ts
   diagnostics/
     aggregator.ts
     engine.ts
@@ -354,6 +404,7 @@ Current automated coverage:
 - Diagnostic rule behavior.
 - Memory pressure evidence principle.
 - Low disk space rule.
+- SQLite history repository.
 
 Cobertura automatizada atual:
 
@@ -363,6 +414,7 @@ Cobertura automatizada atual:
 - Comportamento das regras de diagnostico.
 - Principio de evidencias para pressao de memoria.
 - Regra de pouco espaco em disco.
+- Repositorio SQLite de historico.
 
 ## Example Diagnostic Output / Exemplo de Resultado
 
@@ -400,13 +452,11 @@ Recomendacoes:
 
 ## Limitations / Limitacoes
 
-- SQLite history is not implemented yet.
 - Disk activity, queue length and process I/O are not implemented yet.
 - Startup apps and power plan context are not implemented yet.
 - GPU, temperature, SMART and Windows Event Log analysis are intentionally out of scope for this phase.
 - The current backend is Electron/Node-based. A future native helper can still be added behind the same preload API.
 
-- Historico em SQLite ainda nao foi implementado.
 - Atividade de disco, fila de disco e I/O por processo ainda nao foram implementados.
 - Apps de inicializacao e plano de energia ainda nao foram implementados.
 - GPU, temperatura, SMART e Windows Event Log estao fora do escopo desta fase.
@@ -416,23 +466,23 @@ Recomendacoes:
 
 Next recommended slices:
 
-1. Save diagnostic summaries locally with SQLite.
+1. Add CPU and memory timeline charts for diagnostic sessions.
 2. Add disk activity and process I/O metrics.
 3. Add startup apps and power plan collectors.
 4. Improve process grouping with parent process context.
-5. Add timeline charts for CPU and memory during diagnostic sessions.
-6. Add exportable diagnostic reports.
+5. Add exportable diagnostic reports.
+6. Add search and filters to local history.
 7. Harden IPC payload validation with Zod.
 8. Build and test a signed Windows installer.
 
 Proximas fatias recomendadas:
 
-1. Salvar diagnosticos localmente com SQLite.
+1. Adicionar graficos de linha de CPU e memoria para sessoes de diagnostico.
 2. Adicionar atividade de disco e I/O por processo.
 3. Adicionar coletores de inicializacao e plano de energia.
 4. Melhorar agrupamento de processos com contexto de processo pai.
-5. Adicionar graficos de linha para CPU e memoria durante diagnosticos.
-6. Adicionar relatorios exportaveis.
+5. Adicionar relatorios exportaveis.
+6. Adicionar busca e filtros no historico local.
 7. Reforcar validacao dos payloads IPC com Zod.
 8. Criar e testar um installer Windows assinado.
 

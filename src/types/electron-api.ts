@@ -4,7 +4,12 @@ import type {
   ProcessGroup,
   SystemInfo,
 } from "./metrics";
-import type { DiagnosticProgress, DiagnosticSummary } from "./diagnostics";
+import type {
+  DiagnosticHistoryDetail,
+  DiagnosticHistoryItem,
+  DiagnosticProgress,
+  DiagnosticSummary,
+} from "./diagnostics";
 
 export interface WhyPcSlowApi {
   metrics: {
@@ -21,6 +26,11 @@ export interface WhyPcSlowApi {
     cancel: () => Promise<DiagnosticProgress>;
     onProgress: (callback: (progress: DiagnosticProgress) => void) => () => void;
     onFinished: (callback: (summary: DiagnosticSummary) => void) => () => void;
+  };
+  history: {
+    list: () => Promise<DiagnosticHistoryItem[]>;
+    get: (id: string) => Promise<DiagnosticHistoryDetail | null>;
+    clear: () => Promise<{ deletedCount: number }>;
   };
 }
 

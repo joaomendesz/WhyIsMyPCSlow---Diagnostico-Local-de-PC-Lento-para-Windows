@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import type { DiagnosticSummary, StartDiagnosticRequest } from "./types";
+import { createHistoryRepository, type HistoryRepository } from "./database/historyRepository";
 import { DiagnosticManager } from "./diagnostics/manager";
 import { IpcChannels } from "./ipc";
 import { MetricsService } from "./services/metricsService";
@@ -9,6 +10,7 @@ const metricsService = new MetricsService();
 const diagnosticManager = new DiagnosticManager(metricsService);
 
 let mainWindow: BrowserWindow | null = null;
+let historyRepository: HistoryRepository | null = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -64,6 +66,8 @@ function registerIpcHandlers() {
         }
       });
 
+      historyRepository?.saveSummary(summary);
+
       if (!event.sender.isDestroyed()) {
         event.sender.send(IpcChannels.diagnosticFinished, summary);
       }
@@ -72,6 +76,25 @@ function registerIpcHandlers() {
     },
   );
   ipcMain.handle(IpcChannels.cancelDiagnostic, () => diagnosticManager.cancel());
+  ipcMain.handle(IpcChannels.listHistory, () => getHistoryRepository().listSessions());
+  ipcMain.handle(IpcChannels.getHistory, (_event, id: string) => {
+    if (!id || typeof id !== "string") {
+      return null;
+    }
+
+    return getHistoryRepository().getSession(id);
+  });
+  ipcMain.handle(IpcChannels.clearHistory, () => ({
+    deletedCount: getHistoryRepository().clearSessions(),
+  }));
+}
+
+function getHistoryRepository(): HistoryRepository {
+  if (!historyRepository) {
+    throw new Error("History database is not ready.");
+  }
+
+  return historyRepository;
 }
 
 function isDev() {
@@ -79,6 +102,7 @@ function isDev() {
 }
 
 app.whenReady().then(() => {
+  historyRepository = createHistoryRepository(app.getPath("userData"));
   registerIpcHandlers();
   createWindow();
 
@@ -99,4 +123,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   metricsService.stop();
+  historyRepository?.close();
 });

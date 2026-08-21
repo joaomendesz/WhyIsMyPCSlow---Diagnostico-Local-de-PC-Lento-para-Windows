@@ -67,3 +67,21 @@ export interface DiagnosticProgress {
   durationSeconds: number;
   samplesCollected: number;
 }
+
+export interface DiagnosticHistoryItem {
+  id: string;
+  analyzedAt: string;
+  status: DiagnosticSummaryStatus;
+  primaryFindingTitle: string | null;
+  primaryFindingCategory: DiagnosticCategory | null;
+  primaryFindingImpact: DiagnosticImpact | null;
+  primaryFindingConfidence: number | null;
+  sampleCount: number;
+  durationSeconds: number;
+  engineVersion: string;
+  createdAt: string;
+}
+
+export interface DiagnosticHistoryDetail extends DiagnosticHistoryItem {
+  summary: DiagnosticSummary;
+}

@@ -9,4 +9,7 @@ export const IpcChannels = {
   cancelDiagnostic: "diagnostic:cancel",
   diagnosticProgress: "diagnostic:progress",
   diagnosticFinished: "diagnostic:finished",
+  listHistory: "history:list",
+  getHistory: "history:get",
+  clearHistory: "history:clear",
 } as const;

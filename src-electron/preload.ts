@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { IpcChannels } from "./ipc";
 import type {
+  DiagnosticHistoryDetail,
+  DiagnosticHistoryItem,
   DiagnosticProgress,
   DiagnosticSummary,
   MetricsMonitorStatus,
@@ -63,5 +65,12 @@ contextBridge.exposeInMainWorld("whyPcSlow", {
         ipcRenderer.removeListener(IpcChannels.diagnosticFinished, listener);
       };
     },
+  },
+  history: {
+    list: () => ipcRenderer.invoke(IpcChannels.listHistory) as Promise<DiagnosticHistoryItem[]>,
+    get: (id: string) =>
+      ipcRenderer.invoke(IpcChannels.getHistory, id) as Promise<DiagnosticHistoryDetail | null>,
+    clear: () =>
+      ipcRenderer.invoke(IpcChannels.clearHistory) as Promise<{ deletedCount: number }>,
   },
 });
