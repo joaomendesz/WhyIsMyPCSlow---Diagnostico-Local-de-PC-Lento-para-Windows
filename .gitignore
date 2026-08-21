@@ -1,0 +1,10 @@
+/node_modules
+/dist
+/dist-ssr
+/dist-electron
+/release
+/.vscode
+/.idea
+*.log
+*.local
+.DS_Store
