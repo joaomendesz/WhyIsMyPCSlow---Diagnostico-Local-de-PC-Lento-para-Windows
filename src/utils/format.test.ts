@@ -6,6 +6,8 @@ describe("formatBytes", () => {
     expect(formatBytes(512)).toBe("512 B");
     expect(formatBytes(1024)).toBe("1.00 KB");
     expect(formatBytes(10 * 1024 * 1024)).toBe("10.0 MB");
+    expect(formatBytes(2 * 1024 ** 3)).toBe("2.00 GB");
+    expect(formatBytes(3 * 1024 ** 4)).toBe("3.00 TB");
   });
 
   it("handles missing values", () => {

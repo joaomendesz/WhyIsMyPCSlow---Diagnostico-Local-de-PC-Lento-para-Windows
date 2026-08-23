@@ -358,9 +358,13 @@ CPU, memory, storage and process data are collected in the Electron main process
 
 If process collection returns no rows on a Windows machine, the app uses a fixed read-only fallback based on `Get-Process`, executed with `execFile`. The renderer never supplies the command. The fallback does not collect command lines.
 
+Process memory reported by `systeminformation` is normalized from KiB to bytes before reaching the renderer. This keeps memory values correctly differentiated as MB, GB or TB in the dashboard, monitor, diagnostics, timeline chart and history.
+
 CPU, memoria, armazenamento e processos sao coletados no processo principal do Electron usando `systeminformation`.
 
 Se a coleta de processos nao retornar linhas em uma maquina Windows, o app usa um fallback fixo e somente leitura baseado em `Get-Process`, executado com `execFile`. O renderer nunca fornece o comando. O fallback nao coleta command line.
+
+A memoria de processos reportada pelo `systeminformation` e normalizada de KiB para bytes antes de chegar ao renderer. Isso mantem os valores corretamente diferenciados como MB, GB ou TB no dashboard, monitor, diagnostico, grafico de timeline e historico.
 
 ## Project Structure / Estrutura do Projeto
 
@@ -447,6 +451,8 @@ Current automated coverage:
 - SQLite history repository.
 - Diagnostic timeline builder.
 - SQLite timeline sample persistence.
+- Byte formatting for MB, GB and TB.
+- Process memory unit normalization from KiB to bytes.
 
 Cobertura automatizada atual:
 
@@ -459,6 +465,8 @@ Cobertura automatizada atual:
 - Repositorio SQLite de historico.
 - Construtor da linha do tempo diagnostica.
 - Persistencia das amostras da timeline no SQLite.
+- Formatacao de bytes para MB, GB e TB.
+- Normalizacao de memoria de processos de KiB para bytes.
 
 ## Example Diagnostic Output / Exemplo de Resultado
 

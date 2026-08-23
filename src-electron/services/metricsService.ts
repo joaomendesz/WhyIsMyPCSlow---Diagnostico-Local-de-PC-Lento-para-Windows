@@ -46,6 +46,8 @@ interface PowerShellStorageInfo {
   free?: unknown;
 }
 
+type ProcessMemoryUnit = "bytes" | "kib";
+
 export class MetricsService {
   private cpuInfo: CpuInfo | null = null;
   private processCache: { groups: ProcessGroup[]; expiresAt: number } | null = null;
@@ -203,7 +205,7 @@ export class MetricsService {
   }
 
   private async getProcessGroups(processes: RawProcessInfo[]): Promise<ProcessGroup[]> {
-    const systemInformationGroups = this.toProcessGroups(processes);
+    const systemInformationGroups = this.toProcessGroups(processes, "kib");
 
     if (systemInformationGroups.length > 0) {
       this.processCache = {
@@ -255,7 +257,7 @@ Get-Process |
       );
 
       const parsed = parsePowerShellProcesses(stdout);
-      return this.toProcessGroups(this.withDerivedProcessCpu(parsed));
+      return this.toProcessGroups(this.withDerivedProcessCpu(parsed), "bytes");
     } catch (error) {
       console.warn("Failed to collect process metrics through PowerShell fallback", error);
       return [];
@@ -290,7 +292,10 @@ Get-Process |
     return rowsWithCpu;
   }
 
-  private toProcessGroups(processes: RawProcessInfo[]): ProcessGroup[] {
+  private toProcessGroups(
+    processes: RawProcessInfo[],
+    memoryUnit: ProcessMemoryUnit,
+  ): ProcessGroup[] {
     const groups = new Map<string, ProcessGroup>();
 
     for (const process of processes) {
@@ -307,8 +312,8 @@ Get-Process |
         name,
         friendlyName,
         cpuPercent: clampPercent(numberValue(process.cpu)),
-        memoryBytes: Math.max(0, numberValue(process.memRss)),
-        virtualMemoryBytes: Math.max(0, numberValue(process.memVsz)),
+        memoryBytes: processMemoryToBytes(process.memRss, memoryUnit),
+        virtualMemoryBytes: processMemoryToBytes(process.memVsz, memoryUnit),
       };
 
       const existing = groups.get(key);
@@ -367,6 +372,16 @@ function numberOrNull(value: number | undefined): number | null {
 
 function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+export function processMemoryToBytes(value: unknown, unit: ProcessMemoryUnit): number {
+  const numericValue = Math.max(0, numberValue(value));
+
+  if (unit === "kib") {
+    return numericValue * 1024;
+  }
+
+  return numericValue;
 }
 
 function stringValue(value: unknown): string {
