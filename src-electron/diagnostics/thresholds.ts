@@ -22,4 +22,15 @@ export const DiagnosticThresholds = {
     lowAvailableBytes: 15 * 1024 ** 3,
     severeAvailableBytes: 5 * 1024 ** 3,
   },
+  disk: {
+    activeHighPercent: 80,
+    activeSeverePercent: 95,
+    requiredActiveSampleRatio: 0.5,
+    throughputHighBytesPerSecond: 35 * 1024 ** 2,
+    requiredThroughputSampleRatio: 0.45,
+    queueHighLength: 2,
+    queueSevereLength: 4,
+    requiredQueueSampleRatio: 0.4,
+    processHogBytesPerSecond: 8 * 1024 ** 2,
+  },
 } as const;

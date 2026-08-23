@@ -1,5 +1,5 @@
 import type { ProcessGroup } from "../types/metrics";
-import { formatBytes, formatPercent } from "../utils/format";
+import { formatBytes, formatBytesPerSecond, formatPercent } from "../utils/format";
 
 interface ProcessTableProps {
   processes: ProcessGroup[];
@@ -19,13 +19,14 @@ export function ProcessTable({ processes, isCompact = false }: ProcessTableProps
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] table-fixed border-collapse text-left">
+        <table className="w-full min-w-[700px] table-fixed border-collapse text-left">
           <thead className="bg-canvas text-xs font-semibold uppercase tracking-normal text-ink/55">
             <tr>
-              <th className="w-[42%] px-4 py-3">Aplicativo</th>
-              <th className="w-[18%] px-4 py-3 text-right">CPU</th>
-              <th className="w-[22%] px-4 py-3 text-right">Memoria</th>
-              <th className="w-[18%] px-4 py-3 text-right">Instancias</th>
+              <th className="w-[36%] px-4 py-3">Aplicativo</th>
+              <th className="w-[15%] px-4 py-3 text-right">CPU</th>
+              <th className="w-[20%] px-4 py-3 text-right">Memoria</th>
+              <th className="w-[19%] px-4 py-3 text-right">Disco</th>
+              <th className="w-[10%] px-4 py-3 text-right">Inst.</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line text-sm">
@@ -40,6 +41,9 @@ export function ProcessTable({ processes, isCompact = false }: ProcessTableProps
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {formatBytes(process.totalMemoryBytes)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {formatBytesPerSecond(process.totalDiskBytesPerSecond)}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">{process.processCount}</td>
               </tr>

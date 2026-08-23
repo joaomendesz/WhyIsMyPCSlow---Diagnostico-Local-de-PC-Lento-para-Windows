@@ -21,6 +21,7 @@ export function runDiagnosticEngine(samples: MetricsSnapshot[]): DiagnosticSumma
     evaluateCpuHog(aggregates),
     evaluateMemoryPressure(aggregates, samples),
     evaluateMemoryHog(aggregates, samples),
+    evaluateDiskIoPressure(aggregates),
     evaluateLowDiskSpace(aggregates),
   ]
     .filter((finding): finding is DiagnosticFinding => Boolean(finding))
@@ -239,6 +240,63 @@ function evaluateLowDiskSpace(aggregates: DiagnosticAggregates): DiagnosticFindi
   };
 }
 
+function evaluateDiskIoPressure(aggregates: DiagnosticAggregates): DiagnosticFinding | null {
+  const thresholds = DiagnosticThresholds.disk;
+  const hasActiveEvidence =
+    aggregates.diskActivePercent.sampleCount > 0 &&
+    aggregates.diskActiveHighSampleRatio >= thresholds.requiredActiveSampleRatio &&
+    aggregates.diskActivePercent.p90 >= thresholds.activeHighPercent;
+  const hasThroughputEvidence =
+    aggregates.diskTotalBytesPerSecond.sampleCount > 0 &&
+    aggregates.diskThroughputHighSampleRatio >= thresholds.requiredThroughputSampleRatio &&
+    aggregates.diskTotalBytesPerSecond.p90 >= thresholds.throughputHighBytesPerSecond;
+  const hasQueueEvidence =
+    aggregates.diskQueueLength.sampleCount > 0 &&
+    aggregates.diskQueueHighSampleRatio >= thresholds.requiredQueueSampleRatio &&
+    aggregates.diskQueueLength.p90 >= thresholds.queueHighLength;
+
+  if (!hasActiveEvidence && !hasThroughputEvidence && !hasQueueEvidence) {
+    return null;
+  }
+
+  const topDiskProcess = getTopDiskProcess(aggregates);
+  const confidence = clampConfidence(
+    56 +
+      aggregates.diskActiveHighSampleRatio * 22 +
+      aggregates.diskThroughputHighSampleRatio * 12 +
+      aggregates.diskQueueHighSampleRatio * 16 +
+      (topDiskProcess ? 6 : 0),
+  );
+
+  return {
+    id: "disk_io_pressure",
+    category: "disk",
+    title: "Disco ficou sob atividade alta",
+    explanation:
+      "O disco apresentou sinais sustentados de leitura, escrita ou fila elevada. Isso pode deixar abertura de apps, navegador, atualizacoes e o proprio Windows lentos para responder.",
+    impact:
+      aggregates.diskActivePercent.p95 >= thresholds.activeSeverePercent ||
+      aggregates.diskQueueLength.p95 >= thresholds.queueSevereLength
+        ? "high"
+        : "medium",
+    confidence,
+    evidence: [
+      evidence("Tempo com disco ativo", formatRatio(aggregates.diskActiveHighSampleRatio), "Parte da sessao acima do limite de atividade configurado."),
+      evidence("P95 de atividade", formatPercent(aggregates.diskActivePercent.p95), "Pico sustentado de atividade do disco."),
+      evidence("P95 de leitura/escrita", formatBytesPerSecond(aggregates.diskTotalBytesPerSecond.p95), "Throughput sustentado observado durante a coleta."),
+      evidence("Fila do disco", formatNumber(aggregates.diskQueueLength.p95), "Fila observada quando o Windows expôs esse contador."),
+    ],
+    recommendations: [
+      recommendation("Identifique tarefas de leitura/escrita", "Updates, antivirus, indexador, sincronizadores e instaladores costumam causar atividade intensa de disco."),
+      recommendation("Evite abrir muitos apps durante picos", "Quando o disco esta ocupado, novas janelas podem parecer travadas mesmo com CPU e RAM aceitaveis."),
+    ],
+    relatedProcesses:
+      topDiskProcess && topDiskProcess.averageDiskBytesPerSecond >= thresholds.processHogBytesPerSecond
+        ? [toRelatedProcess(topDiskProcess)]
+        : [],
+  };
+}
+
 function buildPositiveChecks(
   aggregates: DiagnosticAggregates,
   findings: DiagnosticFinding[],
@@ -273,6 +331,14 @@ function buildPositiveChecks(
     });
   }
 
+  if (!findingIds.has("disk_io_pressure")) {
+    checks.push({
+      id: "disk_io_ok",
+      title: "Disco sem pressao forte de I/O",
+      detail: `P95 de leitura/escrita: ${formatBytesPerSecond(aggregates.diskTotalBytesPerSecond.p95)}.`,
+    });
+  }
+
   return checks;
 }
 
@@ -286,6 +352,14 @@ function getTopMemoryProcess(aggregates: DiagnosticAggregates): ProcessAggregate
   return aggregates.processAggregates[0] ?? null;
 }
 
+function getTopDiskProcess(aggregates: DiagnosticAggregates): ProcessAggregate | null {
+  return [...aggregates.processAggregates].sort(
+    (a, b) =>
+      b.averageDiskBytesPerSecond - a.averageDiskBytesPerSecond ||
+      b.maxDiskBytesPerSecond - a.maxDiskBytesPerSecond,
+  )[0] ?? null;
+}
+
 function getSystemVolume(volumes: StorageVolume[]): StorageVolume | null {
   return volumes.find((volume) => volume.isSystemDrive) ?? volumes[0] ?? null;
 }
@@ -295,6 +369,9 @@ function toRelatedProcess(process: ProcessAggregate) {
     name: process.displayName,
     cpuPercent: process.averageCpuPercent,
     memoryBytes: process.averageMemoryBytes,
+    diskReadBytesPerSecond: process.averageDiskReadBytesPerSecond,
+    diskWriteBytesPerSecond: process.averageDiskWriteBytesPerSecond,
+    diskTotalBytesPerSecond: process.averageDiskBytesPerSecond,
   };
 }
 
@@ -324,6 +401,14 @@ function formatPercent(value: number): string {
 
 function formatRatio(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatNumber(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(value >= 10 ? 0 : 1) : "--";
+}
+
+function formatBytesPerSecond(value: number): string {
+  return `${formatBytes(value)}/s`;
 }
 
 function formatBytes(value: number): string {

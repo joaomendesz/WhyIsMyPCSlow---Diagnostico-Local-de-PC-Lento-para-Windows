@@ -13,13 +13,14 @@ import {
   type TooltipValueType,
 } from "recharts";
 import type { DiagnosticTimelineSample } from "../types/diagnostics";
-import { formatBytes, formatPercent } from "../utils/format";
+import { formatBytes, formatBytesPerSecond, formatPercent } from "../utils/format";
 
 const EMPTY_TIMELINE: DiagnosticTimelineSample[] = [];
 
 const chartColors = {
   cpu: "#d1495b",
   memory: "#0f8b8d",
+  disk: "#f2a541",
   storage: "#2f9e44",
 };
 
@@ -62,13 +63,14 @@ export function DiagnosticTimelineChart({
           <div>
             <h3 className="text-base font-semibold">Linha do tempo do diagnostico</h3>
             <p className="mt-1 text-sm text-ink/60">
-              CPU, RAM e espaco livre do disco do sistema durante a coleta.
+              CPU, RAM, disco ativo e espaco livre durante a coleta.
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-xs text-ink/60 sm:w-72">
+        <div className="grid grid-cols-4 gap-2 text-xs text-ink/60 sm:w-96">
           <TimelineStat label="CPU pico" value={formatPercent(maxOf(data, "cpuUsagePercent"))} />
           <TimelineStat label="RAM pico" value={formatPercent(maxOf(data, "memoryUsedPercent"))} />
+          <TimelineStat label="Disco pico" value={formatPercent(maxNullableOf(data, "diskActivePercent"))} />
           <TimelineStat label="Amostras" value={String(data.length)} />
         </div>
       </div>
@@ -76,7 +78,7 @@ export function DiagnosticTimelineChart({
       <div
         className="mt-4 h-72 min-w-0"
         role="img"
-        aria-label="Grafico de linha com CPU, RAM e espaco livre do disco do sistema ao longo do diagnostico."
+        aria-label="Grafico de linha com CPU, RAM, disco ativo e espaco livre ao longo do diagnostico."
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 12, right: 20, bottom: 4, left: 0 }}>
@@ -117,6 +119,17 @@ export function DiagnosticTimelineChart({
               strokeWidth={2}
               dot={data.length <= 12}
               activeDot={{ r: 5 }}
+              isAnimationActive={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="diskActivePercent"
+              name="Disco ativo"
+              stroke={chartColors.disk}
+              strokeWidth={2}
+              dot={data.length <= 12}
+              activeDot={{ r: 5 }}
+              connectNulls
               isAnimationActive={false}
             />
             <Line
@@ -168,6 +181,24 @@ function TimelineTooltip({
           value={formatBytes(sample.memoryAvailableBytes)}
         />
         <TooltipRow
+          label="Disco ativo"
+          value={formatPercent(sample.diskActivePercent)}
+        />
+        <TooltipRow
+          label="Leitura/escrita"
+          value={`${formatBytesPerSecond(sample.diskReadBytesPerSecond)} / ${formatBytesPerSecond(
+            sample.diskWriteBytesPerSecond,
+          )}`}
+        />
+        <TooltipRow
+          label="Fila"
+          value={
+            sample.diskQueueLength === null || sample.diskQueueLength === undefined
+              ? "--"
+              : sample.diskQueueLength.toFixed(sample.diskQueueLength >= 10 ? 0 : 1)
+          }
+        />
+        <TooltipRow
           label="Disco livre"
           value={
             sample.systemDriveFreePercent === null
@@ -191,6 +222,12 @@ function TimelineTooltip({
             ? ""
             : ` (${formatBytes(sample.topMemoryProcessBytes)})`}
         </p>
+        <p className="mt-1 truncate">
+          Disco: {sample.topDiskProcessName ?? "--"}
+          {sample.topDiskProcessBytesPerSecond === null
+            ? ""
+            : ` (${formatBytesPerSecond(sample.topDiskProcessBytesPerSecond)})`}
+        </p>
       </div>
     </div>
   );
@@ -207,6 +244,13 @@ function TooltipRow({ label, value }: { label: string; value: string }) {
 
 function maxOf(data: TimelinePoint[], key: keyof Pick<TimelinePoint, "cpuUsagePercent" | "memoryUsedPercent">) {
   return data.reduce((maxValue, sample) => Math.max(maxValue, sample[key]), 0);
+}
+
+function maxNullableOf(
+  data: TimelinePoint[],
+  key: keyof Pick<TimelinePoint, "diskActivePercent">,
+) {
+  return data.reduce((maxValue, sample) => Math.max(maxValue, sample[key] ?? 0), 0);
 }
 
 function formatSeconds(value: number): string {

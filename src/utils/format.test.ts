@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { clampPercent, formatBytes, formatPercent, formatUptime } from "./format";
+import {
+  clampPercent,
+  formatBytes,
+  formatBytesPerSecond,
+  formatPercent,
+  formatUptime,
+} from "./format";
 
 describe("formatBytes", () => {
   it("formats byte values into readable units", () => {
@@ -18,6 +24,13 @@ describe("formatBytes", () => {
 describe("formatPercent", () => {
   it("rounds percentage values", () => {
     expect(formatPercent(37.6)).toBe("38%");
+  });
+});
+
+describe("formatBytesPerSecond", () => {
+  it("formats byte rates", () => {
+    expect(formatBytesPerSecond(5 * 1024 ** 2)).toBe("5.00 MB/s");
+    expect(formatBytesPerSecond(null)).toBe("--");
   });
 });
 

@@ -28,4 +28,34 @@ describe("buildDiagnosticAggregates", () => {
     expect(aggregates.memoryHighSampleRatio).toBeCloseTo(2 / 3);
     expect(aggregates.memoryLowAvailableSampleRatio).toBeCloseTo(2 / 3);
   });
+
+  it("tracks sustained disk activity and throughput ratios", () => {
+    const samples = [
+      createSample({
+        diskActivePercent: 92,
+        diskReadBytesPerSecond: 28 * 1024 ** 2,
+        diskWriteBytesPerSecond: 14 * 1024 ** 2,
+        diskQueueLength: 3,
+      }),
+      createSample({
+        diskActivePercent: 86,
+        diskReadBytesPerSecond: 30 * 1024 ** 2,
+        diskWriteBytesPerSecond: 10 * 1024 ** 2,
+        diskQueueLength: 2.5,
+      }),
+      createSample({
+        diskActivePercent: 35,
+        diskReadBytesPerSecond: 2 * 1024 ** 2,
+        diskWriteBytesPerSecond: 1024 ** 2,
+        diskQueueLength: 0.4,
+      }),
+    ];
+
+    const aggregates = buildDiagnosticAggregates(samples);
+
+    expect(aggregates.diskActiveHighSampleRatio).toBeCloseTo(2 / 3);
+    expect(aggregates.diskThroughputHighSampleRatio).toBeCloseTo(2 / 3);
+    expect(aggregates.diskQueueHighSampleRatio).toBeCloseTo(2 / 3);
+    expect(aggregates.diskTotalBytesPerSecond.p90).toBe(42 * 1024 ** 2);
+  });
 });

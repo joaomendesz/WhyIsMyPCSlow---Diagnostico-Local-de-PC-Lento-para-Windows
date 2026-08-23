@@ -13,7 +13,7 @@ import type {
   DiagnosticProgress,
   DiagnosticSummary,
 } from "../types/diagnostics";
-import { clampPercent, formatBytes, formatPercent } from "../utils/format";
+import { clampPercent, formatBytes, formatBytesPerSecond, formatPercent } from "../utils/format";
 
 const initialProgress: DiagnosticProgress = {
   status: "idle",
@@ -262,6 +262,9 @@ function FindingCard({
               <span>{process.name}</span>
               <span className="text-ink/60">
                 {formatPercent(process.cpuPercent)} CPU / {formatBytes(process.memoryBytes)}
+                {process.diskTotalBytesPerSecond
+                  ? ` / ${formatBytesPerSecond(process.diskTotalBytesPerSecond)} disco`
+                  : ""}
               </span>
             </div>
           ))}

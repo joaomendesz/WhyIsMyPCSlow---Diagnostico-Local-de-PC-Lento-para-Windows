@@ -1,17 +1,21 @@
-import { Cpu, MemoryStick, RefreshCw } from "lucide-react";
+import { Cpu, HardDrive, MemoryStick, RefreshCw } from "lucide-react";
 import { MetricCard } from "../components/MetricCard";
 import { ProcessTable } from "../components/ProcessTable";
 import { StatusPill } from "../components/StatusPill";
 import { useMetricsStore } from "../stores/metricsStore";
-import { formatBytes, formatUptime } from "../utils/format";
+import { formatBytes, formatBytesPerSecond, formatUptime } from "../utils/format";
 
 export function DashboardPage() {
   const { metrics, systemInfo, isLoading, isStreaming, error, refreshOnce } = useMetricsStore();
 
   const cpuValue = metrics?.cpu.totalUsagePercent ?? null;
   const memoryValue = metrics?.memory.usedPercent ?? null;
+  const diskValue = metrics?.diskActivity.activePercent ?? null;
   const memoryDetail = metrics
     ? `${formatBytes(metrics.memory.usedBytes)} / ${formatBytes(metrics.memory.totalBytes)}`
+    : "--";
+  const diskDetail = metrics
+    ? `${formatBytesPerSecond(metrics.diskActivity.readBytesPerSecond)} leitura / ${formatBytesPerSecond(metrics.diskActivity.writeBytesPerSecond)} escrita`
     : "--";
 
   return (
@@ -40,7 +44,7 @@ export function DashboardPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-4 lg:grid-cols-3">
         <MetricCard
           title="CPU"
           value={cpuValue}
@@ -53,6 +57,7 @@ export function DashboardPage() {
           tone="teal"
         />
         <MetricCard title="Memoria" value={memoryValue} detail={memoryDetail} icon={MemoryStick} tone="rose" />
+        <MetricCard title="Disco ativo" value={diskValue} detail={diskDetail} icon={HardDrive} tone="amber" />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1fr_360px]">

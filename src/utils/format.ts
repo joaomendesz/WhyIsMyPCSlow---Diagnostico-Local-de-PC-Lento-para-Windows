@@ -30,6 +30,14 @@ export function formatPercent(value: number | null | undefined): string {
   return `${Math.round(value)}%`;
 }
 
+export function formatBytesPerSecond(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "--";
+  }
+
+  return `${formatBytes(value)}/s`;
+}
+
 export function formatUptime(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
     return "--";

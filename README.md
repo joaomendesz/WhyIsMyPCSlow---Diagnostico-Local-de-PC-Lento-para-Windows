@@ -8,13 +8,13 @@ WhyIsMyPCSlow e um aplicativo desktop local-first para Windows 10 e Windows 11. 
 
 Official GitHub repository / Repositorio oficial no GitHub:
 
-[https://github.com/joaomendesz/PC-Migration-Assistant](https://github.com/joaomendesz/PC-Migration-Assistant)
+[https://github.com/joaomendesz/WhyIsMyPCSlow---Diagnostico-Local-de-PC-Lento-para-Windows](https://github.com/joaomendesz/WhyIsMyPCSlow---Diagnostico-Local-de-PC-Lento-para-Windows)
 
 ## SEO Keywords
 
-Windows performance diagnostics, slow PC analyzer, why is my PC slow, Electron desktop app, React TypeScript desktop app, local-first diagnostics, CPU bottleneck detector, memory pressure detector, low disk space detector, diagnostic timeline chart, process resource monitor, Windows 11 performance tool, Windows 10 performance monitor, offline PC diagnostics, deterministic diagnostic engine, SQLite diagnostic history, Windows PC migration assistant.
+Windows performance diagnostics, slow PC analyzer, why is my PC slow, Electron desktop app, React TypeScript desktop app, local-first diagnostics, CPU bottleneck detector, memory pressure detector, low disk space detector, Windows disk 100% diagnostic, disk I/O pressure detector, diagnostic timeline chart, process resource monitor, Windows 11 performance tool, Windows 10 performance monitor, offline PC diagnostics, deterministic diagnostic engine, SQLite diagnostic history.
 
-Diagnostico de desempenho Windows, analisador de PC lento, por que meu PC esta lento, aplicativo desktop Electron, React TypeScript desktop, diagnostico local-first, detector de gargalo de CPU, detector de pressao de memoria RAM, detector de pouco espaco em disco, grafico de linha do tempo do diagnostico, monitor de processos Windows, ferramenta de desempenho Windows 11, ferramenta de desempenho Windows 10, diagnostico offline de computador lento, motor de diagnostico deterministico, historico SQLite de diagnosticos, assistente de migracao de PC Windows.
+Diagnostico de desempenho Windows, analisador de PC lento, por que meu PC esta lento, aplicativo desktop Electron, React TypeScript desktop, diagnostico local-first, detector de gargalo de CPU, detector de pressao de memoria RAM, detector de pouco espaco em disco, diagnostico de disco 100% Windows, detector de pressao de I/O de disco, grafico de linha do tempo do diagnostico, monitor de processos Windows, ferramenta de desempenho Windows 11, ferramenta de desempenho Windows 10, diagnostico offline de computador lento, motor de diagnostico deterministico, historico SQLite de diagnosticos.
 
 ## Product Vision / Visao do Produto
 
@@ -56,17 +56,20 @@ Implemented in this phase:
 - Deterministic diagnostic session.
 - Sample aggregation.
 - Diagnostic Engine v1.
-- First five diagnostic rules:
+- First six diagnostic rules:
   - CPU Saturation
   - CPU Hog
   - Memory Pressure
   - Memory Hog
   - Low Disk Space
+  - Disk I/O Pressure
 - Human-readable findings, evidence, impact, confidence and recommendations.
 - Local SQLite history for completed diagnostics.
 - History page with previous sessions, primary findings and evidence details.
 - Diagnostic timeline charts for CPU, memory and system drive free space.
 - Per-sample diagnostic timeline storage in SQLite.
+- Disk activity, read/write throughput and queue length collection.
+- Per-process disk I/O rates when Windows performance counters are available.
 - Automated tests for formatting, process names, aggregation and diagnostic rules.
 
 Implementado nesta fase:
@@ -80,17 +83,20 @@ Implementado nesta fase:
 - Sessao de diagnostico deterministica.
 - Agregacao de amostras.
 - Diagnostic Engine v1.
-- Cinco primeiras regras de diagnostico:
+- Seis primeiras regras de diagnostico:
   - Saturacao de CPU
   - Processo consumindo CPU
   - Pressao de memoria RAM
   - Processo consumindo muita memoria
   - Pouco espaco em disco
+  - Pressao de I/O de disco
 - Findings com texto humano, evidencias, impacto, confianca e recomendacoes.
 - Historico local em SQLite para diagnosticos concluidos.
 - Pagina de historico com sessoes anteriores, findings principais e detalhes de evidencias.
 - Graficos de linha do tempo do diagnostico para CPU, memoria e espaco livre do disco do sistema.
 - Armazenamento das amostras da linha do tempo no SQLite.
+- Coleta de atividade do disco, leitura/escrita por segundo e fila.
+- I/O de disco por processo quando os contadores de performance do Windows estao disponiveis.
 - Testes automatizados para formatacao, nomes de processos, agregacao e regras.
 
 ## Tech Stack / Tecnologias
@@ -187,20 +193,28 @@ Every completed diagnostic now includes a chart-ready timeline. The app records 
 - CPU usage percentage.
 - Memory usage percentage.
 - Available physical memory.
+- Disk active percentage.
+- Disk read/write throughput.
+- Disk queue length when exposed by Windows.
 - Free space percentage on the system drive.
 - Available bytes on the system drive.
 - Top CPU process group at that moment.
 - Top memory process group at that moment.
+- Top disk I/O process group at that moment.
 
 Cada diagnostico concluido agora inclui uma linha do tempo pronta para graficos. O app registra um ponto por amostra coletada com:
 
 - Percentual de uso de CPU.
 - Percentual de uso de memoria.
 - Memoria fisica disponivel.
+- Percentual de disco ativo.
+- Leitura/escrita do disco por segundo.
+- Fila do disco quando exposta pelo Windows.
 - Percentual livre no disco do sistema.
 - Bytes disponiveis no disco do sistema.
 - Grupo de processo com maior CPU naquele momento.
 - Grupo de processo com maior memoria naquele momento.
+- Grupo de processo com maior I/O de disco naquele momento.
 
 This makes the diagnosis easier to trust: users can see if a bottleneck was sustained, temporary or correlated with another resource.
 
@@ -284,6 +298,12 @@ Detects low free space on the system drive. This can affect Windows updates, cac
 
 Detecta pouco espaco livre no disco do sistema. Isso pode afetar updates do Windows, cache, arquivos temporarios e memoria virtual.
 
+### Disk I/O Pressure
+
+Detects sustained disk activity, high read/write throughput or elevated queue length. This helps explain the common "disk 100%" Windows slowdown even when free space is still acceptable.
+
+Detecta atividade sustentada do disco, leitura/escrita elevada ou fila alta. Isso ajuda a explicar a lentidao comum de "disco 100%" no Windows mesmo quando ainda existe espaco livre aceitavel.
+
 ## Privacy / Privacidade
 
 WhyIsMyPCSlow is local-first.
@@ -360,11 +380,25 @@ If process collection returns no rows on a Windows machine, the app uses a fixed
 
 Process memory reported by `systeminformation` is normalized from KiB to bytes before reaching the renderer. This keeps memory values correctly differentiated as MB, GB or TB in the dashboard, monitor, diagnostics, timeline chart and history.
 
+Disk activity on Windows is collected through fixed read-only PowerShell/CIM performance counters:
+
+- `Win32_PerfFormattedData_PerfDisk_PhysicalDisk`
+- `Win32_PerfFormattedData_PerfProc_Process`
+
+The renderer never supplies counter names or commands. These counters provide disk active percentage, read/write bytes per second, queue length and per-process disk rates when available.
+
 CPU, memoria, armazenamento e processos sao coletados no processo principal do Electron usando `systeminformation`.
 
 Se a coleta de processos nao retornar linhas em uma maquina Windows, o app usa um fallback fixo e somente leitura baseado em `Get-Process`, executado com `execFile`. O renderer nunca fornece o comando. O fallback nao coleta command line.
 
 A memoria de processos reportada pelo `systeminformation` e normalizada de KiB para bytes antes de chegar ao renderer. Isso mantem os valores corretamente diferenciados como MB, GB ou TB no dashboard, monitor, diagnostico, grafico de timeline e historico.
+
+A atividade do disco no Windows e coletada por contadores fixos e somente leitura via PowerShell/CIM:
+
+- `Win32_PerfFormattedData_PerfDisk_PhysicalDisk`
+- `Win32_PerfFormattedData_PerfProc_Process`
+
+O renderer nunca fornece nomes de contadores ou comandos. Esses contadores entregam percentual de disco ativo, bytes de leitura/escrita por segundo, fila e taxas de disco por processo quando disponiveis.
 
 ## Project Structure / Estrutura do Projeto
 
@@ -448,6 +482,7 @@ Current automated coverage:
 - Diagnostic rule behavior.
 - Memory pressure evidence principle.
 - Low disk space rule.
+- Disk I/O pressure rule.
 - SQLite history repository.
 - Diagnostic timeline builder.
 - SQLite timeline sample persistence.
@@ -462,6 +497,7 @@ Cobertura automatizada atual:
 - Comportamento das regras de diagnostico.
 - Principio de evidencias para pressao de memoria.
 - Regra de pouco espaco em disco.
+- Regra de pressao de I/O de disco.
 - Repositorio SQLite de historico.
 - Construtor da linha do tempo diagnostica.
 - Persistencia das amostras da timeline no SQLite.
@@ -504,12 +540,14 @@ Recomendacoes:
 
 ## Limitations / Limitacoes
 
-- Disk activity, queue length and process I/O are not implemented yet.
+- Disk activity depends on Windows performance counters being available.
+- Per-process disk I/O may be unavailable on restricted Windows environments.
 - Startup apps and power plan context are not implemented yet.
 - GPU, temperature, SMART and Windows Event Log analysis are intentionally out of scope for this phase.
 - The current backend is Electron/Node-based. A future native helper can still be added behind the same preload API.
 
-- Atividade de disco, fila de disco e I/O por processo ainda nao foram implementados.
+- Atividade de disco depende dos contadores de performance do Windows estarem disponiveis.
+- I/O de disco por processo pode ficar indisponivel em ambientes Windows restritos.
 - Apps de inicializacao e plano de energia ainda nao foram implementados.
 - GPU, temperatura, SMART e Windows Event Log estao fora do escopo desta fase.
 - O backend atual e baseado em Electron/Node. Um helper nativo futuro ainda pode ser adicionado por tras da mesma API do preload.
@@ -518,23 +556,23 @@ Recomendacoes:
 
 Next recommended slices:
 
-1. Add disk activity and process I/O metrics.
-2. Add exportable diagnostic reports with timeline snapshots.
-3. Add search and filters to local history.
-4. Add startup apps and power plan collectors.
-5. Improve process grouping with parent process context.
-6. Add timeline comparison between diagnostic sessions.
+1. Add exportable diagnostic reports with timeline snapshots.
+2. Add search and filters to local history.
+3. Add startup apps and power plan collectors.
+4. Improve process grouping with parent process context.
+5. Add timeline comparison between diagnostic sessions.
+6. Add disk model/type context for HDD vs SSD explanations.
 7. Harden IPC payload validation with Zod.
 8. Build and test a signed Windows installer.
 
 Proximas fatias recomendadas:
 
-1. Adicionar atividade de disco e I/O por processo.
-2. Adicionar relatorios exportaveis com capturas da timeline.
-3. Adicionar busca e filtros no historico local.
-4. Adicionar coletores de inicializacao e plano de energia.
-5. Melhorar agrupamento de processos com contexto de processo pai.
-6. Adicionar comparacao de timeline entre sessoes de diagnostico.
+1. Adicionar relatorios exportaveis com capturas da timeline.
+2. Adicionar busca e filtros no historico local.
+3. Adicionar coletores de inicializacao e plano de energia.
+4. Melhorar agrupamento de processos com contexto de processo pai.
+5. Adicionar comparacao de timeline entre sessoes de diagnostico.
+6. Adicionar contexto de tipo/modelo de disco para explicar HDD vs SSD.
 7. Reforcar validacao dos payloads IPC com Zod.
 8. Criar e testar um installer Windows assinado.
 

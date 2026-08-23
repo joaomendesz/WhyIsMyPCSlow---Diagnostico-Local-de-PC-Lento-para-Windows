@@ -20,6 +20,9 @@ export interface ProcessSample {
   cpuPercent: number;
   memoryBytes: number;
   virtualMemoryBytes: number;
+  diskReadBytesPerSecond: number;
+  diskWriteBytesPerSecond: number;
+  diskTotalBytesPerSecond: number;
 }
 
 export interface ProcessGroup {
@@ -28,6 +31,9 @@ export interface ProcessGroup {
   processCount: number;
   totalCpuPercent: number;
   totalMemoryBytes: number;
+  totalDiskReadBytesPerSecond: number;
+  totalDiskWriteBytesPerSecond: number;
+  totalDiskBytesPerSecond: number;
   processes: ProcessSample[];
 }
 
@@ -42,10 +48,21 @@ export interface StorageVolume {
   isSystemDrive: boolean;
 }
 
+export interface DiskActivitySample {
+  activePercent: number | null;
+  readBytesPerSecond: number;
+  writeBytesPerSecond: number;
+  totalBytesPerSecond: number;
+  queueLength: number | null;
+  iops: number | null;
+  source: "systeminformation" | "powershell" | "unavailable";
+}
+
 export interface MetricsSnapshot {
   timestamp: number;
   cpu: CpuSample;
   memory: MemorySample;
+  diskActivity: DiskActivitySample;
   processGroups: ProcessGroup[];
   storageVolumes: StorageVolume[];
 }
@@ -77,7 +94,7 @@ export type DiagnosticStatus =
 
 export type DiagnosticImpact = "low" | "medium" | "high";
 
-export type DiagnosticCategory = "cpu" | "memory" | "storage" | "process";
+export type DiagnosticCategory = "cpu" | "memory" | "storage" | "disk" | "process";
 
 export interface DiagnosticEvidence {
   label: string;
@@ -94,6 +111,9 @@ export interface DiagnosticRelatedProcess {
   name: string;
   cpuPercent: number;
   memoryBytes: number;
+  diskReadBytesPerSecond?: number;
+  diskWriteBytesPerSecond?: number;
+  diskTotalBytesPerSecond?: number;
 }
 
 export interface DiagnosticFinding {
@@ -120,12 +140,19 @@ export interface DiagnosticTimelineSample {
   cpuUsagePercent: number;
   memoryUsedPercent: number;
   memoryAvailableBytes: number;
+  diskActivePercent: number | null;
+  diskReadBytesPerSecond: number;
+  diskWriteBytesPerSecond: number;
+  diskTotalBytesPerSecond: number;
+  diskQueueLength: number | null;
   systemDriveFreePercent: number | null;
   systemDriveAvailableBytes: number | null;
   topCpuProcessName: string | null;
   topCpuProcessPercent: number | null;
   topMemoryProcessName: string | null;
   topMemoryProcessBytes: number | null;
+  topDiskProcessName: string | null;
+  topDiskProcessBytesPerSecond: number | null;
 }
 
 export type DiagnosticSummaryStatus = "healthy" | "issuesFound" | "inconclusive";

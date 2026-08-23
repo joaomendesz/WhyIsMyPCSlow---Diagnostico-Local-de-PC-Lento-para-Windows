@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import si from "systeminformation";
 import type {
   CpuSample,
+  DiskActivitySample,
   MemorySample,
   MetricsMonitorStatus,
   MetricsSnapshot,
@@ -46,7 +47,37 @@ interface PowerShellStorageInfo {
   free?: unknown;
 }
 
-type ProcessMemoryUnit = "bytes" | "kib";
+interface PowerShellDiskActivityInfo {
+  activePercent?: unknown;
+  readBytesPerSecond?: unknown;
+  writeBytesPerSecond?: unknown;
+  queueLength?: unknown;
+  readsPerSecond?: unknown;
+  writesPerSecond?: unknown;
+}
+
+interface PowerShellProcessDiskInfo {
+  pid?: unknown;
+  readBytesPerSecond?: unknown;
+  writeBytesPerSecond?: unknown;
+}
+
+interface PowerShellWindowsDiskMetricsInfo {
+  disk?: unknown;
+  processes?: unknown;
+}
+
+export interface ProcessDiskRate {
+  readBytesPerSecond: number;
+  writeBytesPerSecond: number;
+}
+
+interface DiskMetrics {
+  diskActivity: DiskActivitySample;
+  processDiskRates: Map<number, ProcessDiskRate>;
+}
+
+export type ProcessMemoryUnit = "bytes" | "kib";
 
 export class MetricsService {
   private cpuInfo: CpuInfo | null = null;
@@ -76,19 +107,31 @@ export class MetricsService {
   }
 
   async getLatestMetrics(): Promise<MetricsSnapshot> {
-    const [currentLoad, cpuInfo, memory, processes, storageVolumes] = await Promise.all([
+    const [
+      currentLoad,
+      cpuInfo,
+      memory,
+      processes,
+      storageVolumes,
+      diskMetrics,
+    ] = await Promise.all([
       si.currentLoad(),
       this.getCpuInfo(),
       si.mem(),
       si.processes(),
       this.getStorageVolumes(),
+      this.getDiskMetrics(),
     ]);
 
     return {
       timestamp: Date.now(),
       cpu: this.toCpuSample(currentLoad.currentLoad, cpuInfo),
       memory: this.toMemorySample(memory.total, memory.available),
-      processGroups: await this.getProcessGroups(processes.list),
+      diskActivity: diskMetrics.diskActivity,
+      processGroups: await this.getProcessGroups(
+        processes.list,
+        diskMetrics.processDiskRates,
+      ),
       storageVolumes,
     };
   }
@@ -204,8 +247,22 @@ export class MetricsService {
     }
   }
 
-  private async getProcessGroups(processes: RawProcessInfo[]): Promise<ProcessGroup[]> {
-    const systemInformationGroups = this.toProcessGroups(processes, "kib");
+  private async getDiskMetrics(): Promise<DiskMetrics> {
+    if (process.platform === "win32") {
+      return collectWindowsDiskMetricsWithPowerShell();
+    }
+
+    return {
+      diskActivity: await collectDiskActivityWithSystemInformation(),
+      processDiskRates: new Map(),
+    };
+  }
+
+  private async getProcessGroups(
+    processes: RawProcessInfo[],
+    processDiskRates: Map<number, ProcessDiskRate>,
+  ): Promise<ProcessGroup[]> {
+    const systemInformationGroups = this.toProcessGroups(processes, "kib", processDiskRates);
 
     if (systemInformationGroups.length > 0) {
       this.processCache = {
@@ -219,7 +276,7 @@ export class MetricsService {
       return this.processCache.groups;
     }
 
-    const fallbackGroups = await this.collectProcessesWithPowerShell();
+    const fallbackGroups = await this.collectProcessesWithPowerShell(processDiskRates);
     this.processCache = {
       groups: fallbackGroups,
       expiresAt: Date.now() + PROCESS_CACHE_MS,
@@ -228,7 +285,9 @@ export class MetricsService {
     return fallbackGroups;
   }
 
-  private async collectProcessesWithPowerShell(): Promise<ProcessGroup[]> {
+  private async collectProcessesWithPowerShell(
+    processDiskRates: Map<number, ProcessDiskRate>,
+  ): Promise<ProcessGroup[]> {
     const script = `
 $ErrorActionPreference = 'Stop'
 Get-Process |
@@ -257,7 +316,7 @@ Get-Process |
       );
 
       const parsed = parsePowerShellProcesses(stdout);
-      return this.toProcessGroups(this.withDerivedProcessCpu(parsed), "bytes");
+      return this.toProcessGroups(this.withDerivedProcessCpu(parsed), "bytes", processDiskRates);
     } catch (error) {
       console.warn("Failed to collect process metrics through PowerShell fallback", error);
       return [];
@@ -295,6 +354,7 @@ Get-Process |
   private toProcessGroups(
     processes: RawProcessInfo[],
     memoryUnit: ProcessMemoryUnit,
+    processDiskRates: Map<number, ProcessDiskRate>,
   ): ProcessGroup[] {
     const groups = new Map<string, ProcessGroup>();
 
@@ -307,13 +367,26 @@ Get-Process |
 
       const key = normalizedProcessKey(name);
       const friendlyName = friendlyProcessName(name);
+      const pid = numberValue(process.pid);
+      const diskRate = processDiskRates.get(pid);
+      const diskReadBytesPerSecond = Math.max(
+        0,
+        numberValue(diskRate?.readBytesPerSecond),
+      );
+      const diskWriteBytesPerSecond = Math.max(
+        0,
+        numberValue(diskRate?.writeBytesPerSecond),
+      );
       const sample: ProcessSample = {
-        pid: numberValue(process.pid),
+        pid,
         name,
         friendlyName,
         cpuPercent: clampPercent(numberValue(process.cpu)),
         memoryBytes: processMemoryToBytes(process.memRss, memoryUnit),
         virtualMemoryBytes: processMemoryToBytes(process.memVsz, memoryUnit),
+        diskReadBytesPerSecond,
+        diskWriteBytesPerSecond,
+        diskTotalBytesPerSecond: diskReadBytesPerSecond + diskWriteBytesPerSecond,
       };
 
       const existing = groups.get(key);
@@ -321,6 +394,9 @@ Get-Process |
         existing.processCount += 1;
         existing.totalCpuPercent = clampPercent(existing.totalCpuPercent + sample.cpuPercent);
         existing.totalMemoryBytes += sample.memoryBytes;
+        existing.totalDiskReadBytesPerSecond += sample.diskReadBytesPerSecond;
+        existing.totalDiskWriteBytesPerSecond += sample.diskWriteBytesPerSecond;
+        existing.totalDiskBytesPerSecond += sample.diskTotalBytesPerSecond;
         existing.processes.push(sample);
       } else {
         groups.set(key, {
@@ -329,6 +405,9 @@ Get-Process |
           processCount: 1,
           totalCpuPercent: sample.cpuPercent,
           totalMemoryBytes: sample.memoryBytes,
+          totalDiskReadBytesPerSecond: sample.diskReadBytesPerSecond,
+          totalDiskWriteBytesPerSecond: sample.diskWriteBytesPerSecond,
+          totalDiskBytesPerSecond: sample.diskTotalBytesPerSecond,
           processes: [sample],
         });
       }
@@ -342,6 +421,7 @@ Get-Process |
       .sort(
         (a, b) =>
           b.totalMemoryBytes - a.totalMemoryBytes ||
+          b.totalDiskBytesPerSecond - a.totalDiskBytesPerSecond ||
           b.totalCpuPercent - a.totalCpuPercent,
       )
       .slice(0, MAX_PROCESS_GROUPS);
@@ -372,6 +452,10 @@ function numberOrNull(value: number | undefined): number | null {
 
 function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function numberOrNullValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function processMemoryToBytes(value: unknown, unit: ProcessMemoryUnit): number {
@@ -414,6 +498,180 @@ function parsePowerShellProcesses(stdout: string): RawProcessInfo[] {
       memVsz: numberValue(process.memVsz),
     };
   });
+}
+
+async function collectDiskActivityWithSystemInformation(): Promise<DiskActivitySample> {
+  const [fsStatsResult, disksIoResult] = await Promise.allSettled([
+    si.fsStats(),
+    si.disksIO(),
+  ]);
+  const fsStats = fsStatsResult.status === "fulfilled" ? fsStatsResult.value : null;
+  const disksIo = disksIoResult.status === "fulfilled" ? disksIoResult.value : null;
+
+  if (!fsStats && !disksIo) {
+    return unavailableDiskActivity();
+  }
+
+  const readBytesPerSecond = Math.max(0, numberValue(fsStats?.rx_sec));
+  const writeBytesPerSecond = Math.max(0, numberValue(fsStats?.wx_sec));
+
+  return {
+    activePercent: clampNullablePercent(disksIo?.tWaitPercent),
+    readBytesPerSecond,
+    writeBytesPerSecond,
+    totalBytesPerSecond: readBytesPerSecond + writeBytesPerSecond,
+    queueLength: null,
+    iops: numberOrNullValue(disksIo?.tIO_sec),
+    source: "systeminformation",
+  };
+}
+
+async function collectWindowsDiskMetricsWithPowerShell(): Promise<DiskMetrics> {
+  const script = `
+$ErrorActionPreference = 'Stop'
+$disk = Get-CimInstance -ClassName Win32_PerfFormattedData_PerfDisk_PhysicalDisk -Filter "Name='_Total'" | Select-Object -First 1
+if ($null -eq $disk) {
+  throw 'Disk performance counters unavailable.'
+}
+$processRows = @()
+try {
+  $processRows = @(
+    Get-CimInstance -ClassName Win32_PerfFormattedData_PerfProc_Process |
+      Where-Object { $_.IDProcess -gt 0 -and $_.Name -ne '_Total' -and $_.Name -ne 'Idle' } |
+      ForEach-Object {
+        [PSCustomObject]@{
+          pid = [int]$_.IDProcess
+          readBytesPerSecond = [double]$_.IOReadBytesPersec
+          writeBytesPerSecond = [double]$_.IOWriteBytesPersec
+        }
+      }
+  )
+} catch {
+  $processRows = @()
+}
+[PSCustomObject]@{
+  disk = [PSCustomObject]@{
+    activePercent = [double]$disk.PercentDiskTime
+    readBytesPerSecond = [double]$disk.DiskReadBytesPersec
+    writeBytesPerSecond = [double]$disk.DiskWriteBytesPersec
+    queueLength = [double]$disk.CurrentDiskQueueLength
+    readsPerSecond = [double]$disk.DiskReadsPersec
+    writesPerSecond = [double]$disk.DiskWritesPersec
+  }
+  processes = $processRows
+} | ConvertTo-Json -Compress -Depth 3
+`;
+
+  try {
+    const { stdout } = await execFileAsync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+      {
+        maxBuffer: 3 * 1024 * 1024,
+        timeout: 5_000,
+        windowsHide: true,
+      },
+    );
+
+    return parseWindowsDiskMetrics(stdout);
+  } catch (error) {
+    console.warn("Failed to collect disk metrics through PowerShell", error);
+    return {
+      diskActivity: unavailableDiskActivity(),
+      processDiskRates: new Map(),
+    };
+  }
+}
+
+export function parseWindowsDiskMetrics(stdout: string): DiskMetrics {
+  const trimmed = stdout.trim();
+
+  if (!trimmed) {
+    return {
+      diskActivity: unavailableDiskActivity(),
+      processDiskRates: new Map(),
+    };
+  }
+
+  const parsed = JSON.parse(trimmed) as PowerShellWindowsDiskMetricsInfo;
+
+  return {
+    diskActivity: toPowerShellDiskActivity(parsed.disk),
+    processDiskRates: toProcessDiskRates(parsed.processes),
+  };
+}
+
+export function parsePowerShellDiskActivity(stdout: string): DiskActivitySample {
+  const trimmed = stdout.trim();
+
+  if (!trimmed) {
+    return unavailableDiskActivity();
+  }
+
+  const parsed = JSON.parse(trimmed) as PowerShellDiskActivityInfo;
+  return toPowerShellDiskActivity(parsed);
+}
+
+export function parsePowerShellProcessDiskRates(stdout: string): Map<number, ProcessDiskRate> {
+  const trimmed = stdout.trim();
+
+  if (!trimmed) {
+    return new Map();
+  }
+
+  const parsed: unknown = JSON.parse(trimmed);
+  return toProcessDiskRates(parsed);
+}
+
+function toPowerShellDiskActivity(value: unknown): DiskActivitySample {
+  const parsed = value as PowerShellDiskActivityInfo;
+  const readBytesPerSecond = Math.max(0, numberValue(parsed.readBytesPerSecond));
+  const writeBytesPerSecond = Math.max(0, numberValue(parsed.writeBytesPerSecond));
+  const readsPerSecond = Math.max(0, numberValue(parsed.readsPerSecond));
+  const writesPerSecond = Math.max(0, numberValue(parsed.writesPerSecond));
+
+  return {
+    activePercent: clampNullablePercent(parsed.activePercent),
+    readBytesPerSecond,
+    writeBytesPerSecond,
+    totalBytesPerSecond: readBytesPerSecond + writeBytesPerSecond,
+    queueLength: numberOrNullValue(parsed.queueLength),
+    iops: readsPerSecond + writesPerSecond,
+    source: "powershell",
+  };
+}
+
+function toProcessDiskRates(value: unknown): Map<number, ProcessDiskRate> {
+  const rows = Array.isArray(value) ? value : value ? [value] : [];
+  const rates = new Map<number, ProcessDiskRate>();
+
+  for (const row of rows) {
+    const diskInfo = row as PowerShellProcessDiskInfo;
+    const pid = numberValue(diskInfo.pid);
+
+    if (pid <= 0) {
+      continue;
+    }
+
+    rates.set(pid, {
+      readBytesPerSecond: Math.max(0, numberValue(diskInfo.readBytesPerSecond)),
+      writeBytesPerSecond: Math.max(0, numberValue(diskInfo.writeBytesPerSecond)),
+    });
+  }
+
+  return rates;
+}
+
+function unavailableDiskActivity(): DiskActivitySample {
+  return {
+    activePercent: null,
+    readBytesPerSecond: 0,
+    writeBytesPerSecond: 0,
+    totalBytesPerSecond: 0,
+    queueLength: null,
+    iops: null,
+    source: "unavailable",
+  };
 }
 
 async function collectStorageWithPowerShell(systemDrive: string): Promise<StorageVolume[]> {
@@ -488,6 +746,12 @@ function parsePowerShellStorage(stdout: string, systemDrive: string): StorageVol
     })
     .filter((volume): volume is StorageVolume => Boolean(volume))
     .sort((a, b) => Number(b.isSystemDrive) - Number(a.isSystemDrive));
+}
+
+function clampNullablePercent(value: unknown): number | null {
+  const numericValue = numberOrNullValue(value);
+
+  return numericValue === null ? null : clampPercent(numericValue);
 }
 
 function cleanPowerShellProcessName(name: string): string {

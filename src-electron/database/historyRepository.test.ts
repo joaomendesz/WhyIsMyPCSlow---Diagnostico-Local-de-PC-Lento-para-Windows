@@ -20,9 +20,18 @@ describe("HistoryRepository", () => {
     expect(detail?.summary.timeline).toHaveLength(2);
 
     const sampleRows = database
-      .prepare("SELECT COUNT(*) AS count FROM diagnostic_samples WHERE session_id = ?")
-      .get(id) as unknown as { count: number };
+      .prepare(
+        `
+        SELECT
+          COUNT(*) AS count,
+          MAX(disk_total_bytes_per_second) AS maxDiskBytesPerSecond
+        FROM diagnostic_samples
+        WHERE session_id = ?
+      `,
+      )
+      .get(id) as unknown as { count: number; maxDiskBytesPerSecond: number };
     expect(sampleRows.count).toBe(2);
+    expect(sampleRows.maxDiskBytesPerSecond).toBe(12 * 1024 ** 2);
 
     repository.close();
   });
@@ -82,12 +91,19 @@ function createSummary(): DiagnosticSummary {
         cpuUsagePercent: 30,
         memoryUsedPercent: 72,
         memoryAvailableBytes: 2 * 1024 ** 3,
+        diskActivePercent: 48,
+        diskReadBytesPerSecond: 6 * 1024 ** 2,
+        diskWriteBytesPerSecond: 2 * 1024 ** 2,
+        diskTotalBytesPerSecond: 8 * 1024 ** 2,
+        diskQueueLength: 1,
         systemDriveFreePercent: 35,
         systemDriveAvailableBytes: 80 * 1024 ** 3,
         topCpuProcessName: "Google Chrome",
         topCpuProcessPercent: 12,
         topMemoryProcessName: "Google Chrome",
         topMemoryProcessBytes: 3 * 1024 ** 3,
+        topDiskProcessName: "Google Chrome",
+        topDiskProcessBytesPerSecond: 8 * 1024 ** 2,
       },
       {
         timestamp: 2_000,
@@ -95,12 +111,19 @@ function createSummary(): DiagnosticSummary {
         cpuUsagePercent: 34,
         memoryUsedPercent: 74,
         memoryAvailableBytes: 1.8 * 1024 ** 3,
+        diskActivePercent: 62,
+        diskReadBytesPerSecond: 8 * 1024 ** 2,
+        diskWriteBytesPerSecond: 4 * 1024 ** 2,
+        diskTotalBytesPerSecond: 12 * 1024 ** 2,
+        diskQueueLength: 1.5,
         systemDriveFreePercent: 34,
         systemDriveAvailableBytes: 78 * 1024 ** 3,
         topCpuProcessName: "Google Chrome",
         topCpuProcessPercent: 18,
         topMemoryProcessName: "Google Chrome",
         topMemoryProcessBytes: 3.1 * 1024 ** 3,
+        topDiskProcessName: "Google Chrome",
+        topDiskProcessBytesPerSecond: 12 * 1024 ** 2,
       },
     ],
   };

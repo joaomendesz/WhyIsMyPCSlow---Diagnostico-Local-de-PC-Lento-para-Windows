@@ -2,7 +2,7 @@ import { Pause, Play } from "lucide-react";
 import { ProcessTable } from "../components/ProcessTable";
 import { StatusPill } from "../components/StatusPill";
 import { useMetricsStore } from "../stores/metricsStore";
-import { formatBytes, formatPercent } from "../utils/format";
+import { formatBytes, formatBytesPerSecond, formatPercent } from "../utils/format";
 
 export function MonitorPage() {
   const { metrics, isStreaming, startMonitoring, stopMonitoring } = useMetricsStore();
@@ -27,7 +27,7 @@ export function MonitorPage() {
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-md border border-line bg-panel p-4 shadow-soft">
           <p className="text-xs font-semibold uppercase tracking-normal text-ink/55">CPU atual</p>
           <p className="mt-3 text-3xl font-semibold">{formatPercent(metrics?.cpu.totalUsagePercent)}</p>
@@ -39,6 +39,17 @@ export function MonitorPage() {
         <div className="rounded-md border border-line bg-panel p-4 shadow-soft">
           <p className="text-xs font-semibold uppercase tracking-normal text-ink/55">Disponivel</p>
           <p className="mt-3 text-3xl font-semibold">{formatBytes(metrics?.memory.availableBytes)}</p>
+        </div>
+        <div className="rounded-md border border-line bg-panel p-4 shadow-soft">
+          <p className="text-xs font-semibold uppercase tracking-normal text-ink/55">Disco ativo</p>
+          <p className="mt-3 text-3xl font-semibold">
+            {formatPercent(metrics?.diskActivity.activePercent)}
+          </p>
+          <p className="mt-2 text-xs text-ink/55">
+            {metrics
+              ? `${formatBytesPerSecond(metrics.diskActivity.readBytesPerSecond)} / ${formatBytesPerSecond(metrics.diskActivity.writeBytesPerSecond)}`
+              : "--"}
+          </p>
         </div>
       </section>
 

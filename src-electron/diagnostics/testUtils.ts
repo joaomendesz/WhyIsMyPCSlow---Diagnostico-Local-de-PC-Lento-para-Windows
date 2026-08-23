@@ -7,6 +7,10 @@ interface SampleOptions {
   availableBytes?: number;
   freePercent?: number;
   availableStorageBytes?: number;
+  diskActivePercent?: number | null;
+  diskReadBytesPerSecond?: number;
+  diskWriteBytesPerSecond?: number;
+  diskQueueLength?: number | null;
   processGroups?: ProcessGroup[];
 }
 
@@ -18,6 +22,8 @@ export function createSample(options: SampleOptions = {}): MetricsSnapshot {
   const memoryUsed = options.memoryUsed ?? 60;
   const availableStorageBytes = options.availableStorageBytes ?? 80 * 1024 ** 3;
   const freePercent = options.freePercent ?? 35;
+  const diskReadBytesPerSecond = options.diskReadBytesPerSecond ?? 2 * 1024 ** 2;
+  const diskWriteBytesPerSecond = options.diskWriteBytesPerSecond ?? 1 * 1024 ** 2;
 
   return {
     timestamp: options.timestamp ?? Date.now(),
@@ -34,6 +40,15 @@ export function createSample(options: SampleOptions = {}): MetricsSnapshot {
       availableBytes,
       usedPercent: memoryUsed,
     },
+    diskActivity: {
+      activePercent: options.diskActivePercent ?? 15,
+      readBytesPerSecond: diskReadBytesPerSecond,
+      writeBytesPerSecond: diskWriteBytesPerSecond,
+      totalBytesPerSecond: diskReadBytesPerSecond + diskWriteBytesPerSecond,
+      queueLength: options.diskQueueLength ?? 0.3,
+      iops: 35,
+      source: "powershell",
+    },
     processGroups: options.processGroups ?? [
       {
         key: "chrome.exe",
@@ -41,6 +56,9 @@ export function createSample(options: SampleOptions = {}): MetricsSnapshot {
         processCount: 8,
         totalCpuPercent: 12,
         totalMemoryBytes: 2 * 1024 ** 3,
+        totalDiskReadBytesPerSecond: 512 * 1024,
+        totalDiskWriteBytesPerSecond: 256 * 1024,
+        totalDiskBytesPerSecond: 768 * 1024,
         processes: [],
       },
     ],

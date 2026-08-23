@@ -9,7 +9,7 @@ export type DiagnosticStatus =
 
 export type DiagnosticImpact = "low" | "medium" | "high";
 
-export type DiagnosticCategory = "cpu" | "memory" | "storage" | "process";
+export type DiagnosticCategory = "cpu" | "memory" | "storage" | "disk" | "process";
 
 export interface DiagnosticEvidence {
   label: string;
@@ -26,6 +26,9 @@ export interface DiagnosticRelatedProcess {
   name: string;
   cpuPercent: number;
   memoryBytes: number;
+  diskReadBytesPerSecond?: number;
+  diskWriteBytesPerSecond?: number;
+  diskTotalBytesPerSecond?: number;
 }
 
 export interface DiagnosticFinding {
@@ -52,12 +55,19 @@ export interface DiagnosticTimelineSample {
   cpuUsagePercent: number;
   memoryUsedPercent: number;
   memoryAvailableBytes: number;
+  diskActivePercent: number | null;
+  diskReadBytesPerSecond: number;
+  diskWriteBytesPerSecond: number;
+  diskTotalBytesPerSecond: number;
+  diskQueueLength: number | null;
   systemDriveFreePercent: number | null;
   systemDriveAvailableBytes: number | null;
   topCpuProcessName: string | null;
   topCpuProcessPercent: number | null;
   topMemoryProcessName: string | null;
   topMemoryProcessBytes: number | null;
+  topDiskProcessName: string | null;
+  topDiskProcessBytesPerSecond: number | null;
 }
 
 export type DiagnosticSummaryStatus = "healthy" | "issuesFound" | "inconclusive";

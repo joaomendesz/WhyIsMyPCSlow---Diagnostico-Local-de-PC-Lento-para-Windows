@@ -7,7 +7,7 @@ import {
   listDiagnosticHistory,
 } from "../services/history";
 import type { DiagnosticHistoryDetail, DiagnosticHistoryItem } from "../types/diagnostics";
-import { formatBytes, formatPercent } from "../utils/format";
+import { formatBytes, formatBytesPerSecond, formatPercent } from "../utils/format";
 
 export function HistoryPage() {
   const [items, setItems] = useState<DiagnosticHistoryItem[]>([]);
@@ -253,6 +253,9 @@ function HistoryDetailPanel({
                   <span>{process.name}</span>
                   <span className="text-ink/60">
                     {formatPercent(process.cpuPercent)} CPU / {formatBytes(process.memoryBytes)}
+                    {process.diskTotalBytesPerSecond
+                      ? ` / ${formatBytesPerSecond(process.diskTotalBytesPerSecond)} disco`
+                      : ""}
                   </span>
                 </div>
               ))}

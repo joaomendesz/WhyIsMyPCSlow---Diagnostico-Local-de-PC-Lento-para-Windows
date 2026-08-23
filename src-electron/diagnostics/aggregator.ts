@@ -18,6 +18,10 @@ export interface ProcessAggregate {
   maxCpuPercent: number;
   averageMemoryBytes: number;
   maxMemoryBytes: number;
+  averageDiskReadBytesPerSecond: number;
+  averageDiskWriteBytesPerSecond: number;
+  averageDiskBytesPerSecond: number;
+  maxDiskBytesPerSecond: number;
   sampleRatioPresent: number;
 }
 
@@ -27,9 +31,18 @@ export interface DiagnosticAggregates {
   cpuUsage: NumericAggregate;
   memoryUsedPercent: NumericAggregate;
   memoryAvailableBytes: NumericAggregate;
+  diskActivePercent: NumericAggregate;
+  diskReadBytesPerSecond: NumericAggregate;
+  diskWriteBytesPerSecond: NumericAggregate;
+  diskTotalBytesPerSecond: NumericAggregate;
+  diskQueueLength: NumericAggregate;
+  diskIops: NumericAggregate;
   cpuHighSampleRatio: number;
   memoryHighSampleRatio: number;
   memoryLowAvailableSampleRatio: number;
+  diskActiveHighSampleRatio: number;
+  diskThroughputHighSampleRatio: number;
+  diskQueueHighSampleRatio: number;
   processAggregates: ProcessAggregate[];
   latestStorageVolumes: StorageVolume[];
 }
@@ -39,6 +52,9 @@ interface ProcessAccumulator {
   displayName: string;
   cpuValues: number[];
   memoryValues: number[];
+  diskReadValues: number[];
+  diskWriteValues: number[];
+  diskTotalValues: number[];
   presentSamples: number;
 }
 
@@ -52,6 +68,9 @@ export function buildDiagnosticAggregates(samples: MetricsSnapshot[]): Diagnosti
       const accumulator = processAccumulators.get(group.key) ?? createProcessAccumulator(group);
       accumulator.cpuValues.push(group.totalCpuPercent);
       accumulator.memoryValues.push(group.totalMemoryBytes);
+      accumulator.diskReadValues.push(group.totalDiskReadBytesPerSecond);
+      accumulator.diskWriteValues.push(group.totalDiskWriteBytesPerSecond);
+      accumulator.diskTotalValues.push(group.totalDiskBytesPerSecond);
       accumulator.presentSamples += 1;
       processAccumulators.set(group.key, accumulator);
     }
@@ -63,6 +82,22 @@ export function buildDiagnosticAggregates(samples: MetricsSnapshot[]): Diagnosti
     cpuUsage: aggregateNumbers(samples.map((sample) => sample.cpu.totalUsagePercent)),
     memoryUsedPercent: aggregateNumbers(samples.map((sample) => sample.memory.usedPercent)),
     memoryAvailableBytes: aggregateNumbers(samples.map((sample) => sample.memory.availableBytes)),
+    diskActivePercent: aggregateNumbers(
+      samples.map((sample) => sample.diskActivity.activePercent ?? Number.NaN),
+    ),
+    diskReadBytesPerSecond: aggregateNumbers(
+      samples.map((sample) => sample.diskActivity.readBytesPerSecond),
+    ),
+    diskWriteBytesPerSecond: aggregateNumbers(
+      samples.map((sample) => sample.diskActivity.writeBytesPerSecond),
+    ),
+    diskTotalBytesPerSecond: aggregateNumbers(
+      samples.map((sample) => sample.diskActivity.totalBytesPerSecond),
+    ),
+    diskQueueLength: aggregateNumbers(
+      samples.map((sample) => sample.diskActivity.queueLength ?? Number.NaN),
+    ),
+    diskIops: aggregateNumbers(samples.map((sample) => sample.diskActivity.iops ?? Number.NaN)),
     cpuHighSampleRatio: ratioWhere(
       samples.map((sample) => sample.cpu.totalUsagePercent),
       (value) => value >= DiagnosticThresholds.cpu.sustainedHighPercent,
@@ -75,6 +110,18 @@ export function buildDiagnosticAggregates(samples: MetricsSnapshot[]): Diagnosti
       samples.map((sample) => sample.memory.availableBytes),
       (value) => value <= DiagnosticThresholds.memory.lowAvailableBytes,
     ),
+    diskActiveHighSampleRatio: ratioWhere(
+      samples.map((sample) => sample.diskActivity.activePercent ?? Number.NaN),
+      (value) => value >= DiagnosticThresholds.disk.activeHighPercent,
+    ),
+    diskThroughputHighSampleRatio: ratioWhere(
+      samples.map((sample) => sample.diskActivity.totalBytesPerSecond),
+      (value) => value >= DiagnosticThresholds.disk.throughputHighBytesPerSecond,
+    ),
+    diskQueueHighSampleRatio: ratioWhere(
+      samples.map((sample) => sample.diskActivity.queueLength ?? Number.NaN),
+      (value) => value >= DiagnosticThresholds.disk.queueHighLength,
+    ),
     processAggregates: [...processAccumulators.values()]
       .map((accumulator) => ({
         key: accumulator.key,
@@ -83,11 +130,16 @@ export function buildDiagnosticAggregates(samples: MetricsSnapshot[]): Diagnosti
         maxCpuPercent: aggregateNumbers(accumulator.cpuValues).max,
         averageMemoryBytes: aggregateNumbers(accumulator.memoryValues).average,
         maxMemoryBytes: aggregateNumbers(accumulator.memoryValues).max,
+        averageDiskReadBytesPerSecond: aggregateNumbers(accumulator.diskReadValues).average,
+        averageDiskWriteBytesPerSecond: aggregateNumbers(accumulator.diskWriteValues).average,
+        averageDiskBytesPerSecond: aggregateNumbers(accumulator.diskTotalValues).average,
+        maxDiskBytesPerSecond: aggregateNumbers(accumulator.diskTotalValues).max,
         sampleRatioPresent: sampleCount === 0 ? 0 : accumulator.presentSamples / sampleCount,
       }))
       .sort(
         (a, b) =>
           b.averageMemoryBytes - a.averageMemoryBytes ||
+          b.averageDiskBytesPerSecond - a.averageDiskBytesPerSecond ||
           b.averageCpuPercent - a.averageCpuPercent,
       ),
     latestStorageVolumes: samples.at(-1)?.storageVolumes ?? [],
@@ -158,6 +210,9 @@ function createProcessAccumulator(group: ProcessGroup): ProcessAccumulator {
     displayName: group.displayName,
     cpuValues: [],
     memoryValues: [],
+    diskReadValues: [],
+    diskWriteValues: [],
+    diskTotalValues: [],
     presentSamples: 0,
   };
 }

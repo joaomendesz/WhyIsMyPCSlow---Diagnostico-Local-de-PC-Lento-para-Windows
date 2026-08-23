@@ -20,6 +20,9 @@ export interface ProcessSample {
   cpuPercent: number;
   memoryBytes: number;
   virtualMemoryBytes: number;
+  diskReadBytesPerSecond: number;
+  diskWriteBytesPerSecond: number;
+  diskTotalBytesPerSecond: number;
 }
 
 export interface ProcessGroup {
@@ -28,6 +31,9 @@ export interface ProcessGroup {
   processCount: number;
   totalCpuPercent: number;
   totalMemoryBytes: number;
+  totalDiskReadBytesPerSecond: number;
+  totalDiskWriteBytesPerSecond: number;
+  totalDiskBytesPerSecond: number;
   processes: ProcessSample[];
 }
 
@@ -42,10 +48,21 @@ export interface StorageVolume {
   isSystemDrive: boolean;
 }
 
+export interface DiskActivitySample {
+  activePercent: number | null;
+  readBytesPerSecond: number;
+  writeBytesPerSecond: number;
+  totalBytesPerSecond: number;
+  queueLength: number | null;
+  iops: number | null;
+  source: "systeminformation" | "powershell" | "unavailable";
+}
+
 export interface MetricsSnapshot {
   timestamp: number;
   cpu: CpuSample;
   memory: MemorySample;
+  diskActivity: DiskActivitySample;
   processGroups: ProcessGroup[];
   storageVolumes: StorageVolume[];
 }

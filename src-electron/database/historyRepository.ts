@@ -7,6 +7,7 @@ import type {
   DiagnosticHistoryDetail,
   DiagnosticHistoryItem,
   DiagnosticSummary,
+  DiagnosticTimelineSample,
 } from "../types";
 
 interface SessionRow {
@@ -81,14 +82,21 @@ export class HistoryRepository {
         cpu_usage_percent,
         memory_used_percent,
         memory_available_bytes,
+        disk_active_percent,
+        disk_read_bytes_per_second,
+        disk_write_bytes_per_second,
+        disk_total_bytes_per_second,
+        disk_queue_length,
         system_drive_free_percent,
         system_drive_available_bytes,
         top_cpu_process_name,
         top_cpu_process_percent,
         top_memory_process_name,
-        top_memory_process_bytes
+        top_memory_process_bytes,
+        top_disk_process_name,
+        top_disk_process_bytes_per_second
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.database.exec("BEGIN IMMEDIATE TRANSACTION");
@@ -133,12 +141,19 @@ export class HistoryRepository {
           sample.cpuUsagePercent,
           sample.memoryUsedPercent,
           sample.memoryAvailableBytes,
+          sample.diskActivePercent,
+          sample.diskReadBytesPerSecond,
+          sample.diskWriteBytesPerSecond,
+          sample.diskTotalBytesPerSecond,
+          sample.diskQueueLength,
           sample.systemDriveFreePercent,
           sample.systemDriveAvailableBytes,
           sample.topCpuProcessName,
           sample.topCpuProcessPercent,
           sample.topMemoryProcessName,
           sample.topMemoryProcessBytes,
+          sample.topDiskProcessName,
+          sample.topDiskProcessBytesPerSecond,
         );
       });
 
@@ -283,18 +298,61 @@ export class HistoryRepository {
         cpu_usage_percent REAL NOT NULL,
         memory_used_percent REAL NOT NULL,
         memory_available_bytes INTEGER NOT NULL,
+        disk_active_percent REAL,
+        disk_read_bytes_per_second INTEGER NOT NULL DEFAULT 0,
+        disk_write_bytes_per_second INTEGER NOT NULL DEFAULT 0,
+        disk_total_bytes_per_second INTEGER NOT NULL DEFAULT 0,
+        disk_queue_length REAL,
         system_drive_free_percent REAL,
         system_drive_available_bytes INTEGER,
         top_cpu_process_name TEXT,
         top_cpu_process_percent REAL,
         top_memory_process_name TEXT,
         top_memory_process_bytes INTEGER,
+        top_disk_process_name TEXT,
+        top_disk_process_bytes_per_second INTEGER,
         FOREIGN KEY (session_id) REFERENCES diagnostic_sessions(id) ON DELETE CASCADE
       );
 
       CREATE INDEX IF NOT EXISTS idx_diagnostic_samples_session_id
       ON diagnostic_samples (session_id, sample_index);
     `);
+
+    this.ensureColumn("diagnostic_samples", "disk_active_percent", "REAL");
+    this.ensureColumn(
+      "diagnostic_samples",
+      "disk_read_bytes_per_second",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    this.ensureColumn(
+      "diagnostic_samples",
+      "disk_write_bytes_per_second",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    this.ensureColumn(
+      "diagnostic_samples",
+      "disk_total_bytes_per_second",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    this.ensureColumn("diagnostic_samples", "disk_queue_length", "REAL");
+    this.ensureColumn("diagnostic_samples", "top_disk_process_name", "TEXT");
+    this.ensureColumn(
+      "diagnostic_samples",
+      "top_disk_process_bytes_per_second",
+      "INTEGER",
+    );
+  }
+
+  private ensureColumn(tableName: string, columnName: string, definition: string) {
+    const rows = this.database
+      .prepare(`PRAGMA table_info(${tableName})`)
+      .all() as unknown as { name: string }[];
+
+    if (rows.some((row) => row.name === columnName)) {
+      return;
+    }
+
+    this.database.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
   }
 }
 
@@ -328,7 +386,34 @@ function parseSummary(summaryJson: string): DiagnosticSummary {
 
   return {
     ...summary,
-    timeline: Array.isArray(summary.timeline) ? summary.timeline : [],
+    timeline: Array.isArray(summary.timeline)
+      ? summary.timeline.map(normalizeTimelineSample)
+      : [],
+  };
+}
+
+function normalizeTimelineSample(
+  sample: Partial<DiagnosticTimelineSample>,
+): DiagnosticTimelineSample {
+  return {
+    timestamp: sample.timestamp ?? 0,
+    offsetSeconds: sample.offsetSeconds ?? 0,
+    cpuUsagePercent: sample.cpuUsagePercent ?? 0,
+    memoryUsedPercent: sample.memoryUsedPercent ?? 0,
+    memoryAvailableBytes: sample.memoryAvailableBytes ?? 0,
+    diskActivePercent: sample.diskActivePercent ?? null,
+    diskReadBytesPerSecond: sample.diskReadBytesPerSecond ?? 0,
+    diskWriteBytesPerSecond: sample.diskWriteBytesPerSecond ?? 0,
+    diskTotalBytesPerSecond: sample.diskTotalBytesPerSecond ?? 0,
+    diskQueueLength: sample.diskQueueLength ?? null,
+    systemDriveFreePercent: sample.systemDriveFreePercent ?? null,
+    systemDriveAvailableBytes: sample.systemDriveAvailableBytes ?? null,
+    topCpuProcessName: sample.topCpuProcessName ?? null,
+    topCpuProcessPercent: sample.topCpuProcessPercent ?? null,
+    topMemoryProcessName: sample.topMemoryProcessName ?? null,
+    topMemoryProcessBytes: sample.topMemoryProcessBytes ?? null,
+    topDiskProcessName: sample.topDiskProcessName ?? null,
+    topDiskProcessBytesPerSecond: sample.topDiskProcessBytesPerSecond ?? null,
   };
 }
 

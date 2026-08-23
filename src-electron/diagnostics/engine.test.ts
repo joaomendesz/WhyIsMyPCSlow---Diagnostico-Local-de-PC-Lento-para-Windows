@@ -35,4 +35,31 @@ describe("runDiagnosticEngine", () => {
     expect(summary.primaryFinding?.id).toBe("low_disk_space");
     expect(summary.primaryFinding?.confidence).toBe(100);
   });
+
+  it("finds sustained disk I/O pressure", () => {
+    const summary = runDiagnosticEngine([
+      createSample({
+        diskActivePercent: 96,
+        diskReadBytesPerSecond: 38 * 1024 ** 2,
+        diskWriteBytesPerSecond: 12 * 1024 ** 2,
+        diskQueueLength: 4,
+      }),
+      createSample({
+        diskActivePercent: 91,
+        diskReadBytesPerSecond: 30 * 1024 ** 2,
+        diskWriteBytesPerSecond: 18 * 1024 ** 2,
+        diskQueueLength: 3,
+      }),
+      createSample({
+        diskActivePercent: 88,
+        diskReadBytesPerSecond: 26 * 1024 ** 2,
+        diskWriteBytesPerSecond: 14 * 1024 ** 2,
+        diskQueueLength: 2.5,
+      }),
+    ]);
+
+    expect(summary.status).toBe("issuesFound");
+    expect(summary.primaryFinding?.id).toBe("disk_io_pressure");
+    expect(summary.primaryFinding?.category).toBe("disk");
+  });
 });
