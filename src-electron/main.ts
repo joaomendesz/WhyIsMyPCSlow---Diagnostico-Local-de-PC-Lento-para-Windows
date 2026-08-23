@@ -1,9 +1,17 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { DiagnosticSummary, StartDiagnosticRequest } from "./types";
+import type {
+  DiagnosticReportFormat,
+  DiagnosticSummary,
+  ExportDiagnosticReportRequest,
+  ExportDiagnosticReportResult,
+  StartDiagnosticRequest,
+} from "./types";
 import { createHistoryRepository, type HistoryRepository } from "./database/historyRepository";
 import { DiagnosticManager } from "./diagnostics/manager";
 import { IpcChannels } from "./ipc";
+import { buildDiagnosticReport } from "./reports/diagnosticReport";
 import { MetricsService } from "./services/metricsService";
 
 const metricsService = new MetricsService();
@@ -84,9 +92,81 @@ function registerIpcHandlers() {
 
     return getHistoryRepository().getSession(id);
   });
+  ipcMain.handle(
+    IpcChannels.exportHistoryReport,
+    async (_event, request: ExportDiagnosticReportRequest): Promise<ExportDiagnosticReportResult> => {
+      const exportRequest = parseExportDiagnosticReportRequest(request);
+      const detail = getHistoryRepository().getSession(exportRequest.id);
+
+      if (!detail) {
+        throw new Error("Diagnostico nao encontrado no historico.");
+      }
+
+      const report = buildDiagnosticReport(detail, exportRequest.format);
+      const saveDialogOptions = {
+        title: "Exportar relatorio de diagnostico",
+        defaultPath: report.fileName,
+        filters: [
+          {
+            name: exportRequest.format === "html" ? "Relatorio HTML" : "Relatorio Markdown",
+            extensions: [report.extension],
+          },
+          {
+            name: "Todos os arquivos",
+            extensions: ["*"],
+          },
+        ],
+      };
+      const saveResult =
+        mainWindow && !mainWindow.isDestroyed()
+          ? await dialog.showSaveDialog(mainWindow, saveDialogOptions)
+          : await dialog.showSaveDialog(saveDialogOptions);
+
+      if (saveResult.canceled || !saveResult.filePath) {
+        return {
+          cancelled: true,
+          filePath: null,
+          format: exportRequest.format,
+        };
+      }
+
+      await writeFile(saveResult.filePath, report.content, "utf8");
+
+      return {
+        cancelled: false,
+        filePath: saveResult.filePath,
+        format: exportRequest.format,
+      };
+    },
+  );
   ipcMain.handle(IpcChannels.clearHistory, () => ({
     deletedCount: getHistoryRepository().clearSessions(),
   }));
+}
+
+function parseExportDiagnosticReportRequest(request: unknown): ExportDiagnosticReportRequest {
+  if (!isRecord(request) || typeof request.id !== "string") {
+    throw new Error("Solicitacao de exportacao invalida.");
+  }
+
+  const format = parseDiagnosticReportFormat(request.format);
+
+  if (!format || request.id.trim().length === 0) {
+    throw new Error("Solicitacao de exportacao invalida.");
+  }
+
+  return {
+    id: request.id.trim(),
+    format,
+  };
+}
+
+function parseDiagnosticReportFormat(format: unknown): DiagnosticReportFormat | null {
+  return format === "markdown" || format === "html" ? format : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function getHistoryRepository(): HistoryRepository {

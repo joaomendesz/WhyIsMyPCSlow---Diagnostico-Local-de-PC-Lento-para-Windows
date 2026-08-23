@@ -1,12 +1,17 @@
-import { CalendarClock, Database, RotateCw, Trash2 } from "lucide-react";
+import { CalendarClock, Code2, Database, FileText, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DiagnosticTimelineChart } from "../components/DiagnosticTimelineChart";
 import {
   clearDiagnosticHistory,
+  exportDiagnosticReport,
   getDiagnosticHistoryDetail,
   listDiagnosticHistory,
 } from "../services/history";
-import type { DiagnosticHistoryDetail, DiagnosticHistoryItem } from "../types/diagnostics";
+import type {
+  DiagnosticHistoryDetail,
+  DiagnosticHistoryItem,
+  DiagnosticReportFormat,
+} from "../types/diagnostics";
 import { formatBytes, formatBytesPerSecond, formatPercent } from "../utils/format";
 
 export function HistoryPage() {
@@ -14,6 +19,8 @@ export function HistoryPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DiagnosticHistoryDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<DiagnosticReportFormat | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const selectedItem = useMemo(
@@ -26,6 +33,8 @@ export function HistoryPage() {
   }, []);
 
   useEffect(() => {
+    setExportMessage(null);
+
     if (!selectedId) {
       setDetail(null);
       return;
@@ -53,6 +62,7 @@ export function HistoryPage() {
   async function loadHistory() {
     setIsLoading(true);
     setError(null);
+    setExportMessage(null);
 
     try {
       const nextItems = await listDiagnosticHistory();
@@ -68,6 +78,7 @@ export function HistoryPage() {
   async function clearHistory() {
     setIsLoading(true);
     setError(null);
+    setExportMessage(null);
 
     try {
       await clearDiagnosticHistory();
@@ -78,6 +89,32 @@ export function HistoryPage() {
       setError(getErrorMessage(historyError));
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function exportSelectedReport(format: DiagnosticReportFormat) {
+    if (!selectedId) {
+      return;
+    }
+
+    setExportingFormat(format);
+    setError(null);
+    setExportMessage(null);
+
+    try {
+      const result = await exportDiagnosticReport(selectedId, format);
+
+      if (result.cancelled) {
+        setExportMessage("Exportacao cancelada.");
+      } else {
+        setExportMessage(
+          `Relatorio ${reportFormatLabel(format)} salvo em ${result.filePath ?? "arquivo local"}.`,
+        );
+      }
+    } catch (historyError) {
+      setError(getErrorMessage(historyError));
+    } finally {
+      setExportingFormat(null);
     }
   }
 
@@ -122,7 +159,13 @@ export function HistoryPage() {
       ) : (
         <section className="grid gap-4 xl:grid-cols-[420px_1fr]">
           <HistoryList items={items} selectedId={selectedId} onSelect={setSelectedId} />
-          <HistoryDetailPanel item={selectedItem} detail={detail} />
+          <HistoryDetailPanel
+            item={selectedItem}
+            detail={detail}
+            exportingFormat={exportingFormat}
+            exportMessage={exportMessage}
+            onExportReport={(format) => void exportSelectedReport(format)}
+          />
         </section>
       )}
     </div>
@@ -208,9 +251,15 @@ function HistoryList({
 function HistoryDetailPanel({
   item,
   detail,
+  exportingFormat,
+  exportMessage,
+  onExportReport,
 }: {
   item: DiagnosticHistoryItem | null;
   detail: DiagnosticHistoryDetail | null;
+  exportingFormat: DiagnosticReportFormat | null;
+  exportMessage: string | null;
+  onExportReport: (format: DiagnosticReportFormat) => void;
 }) {
   if (!item) {
     return null;
@@ -218,6 +267,7 @@ function HistoryDetailPanel({
 
   const summary = detail?.summary;
   const finding = summary?.primaryFinding ?? null;
+  const isExportDisabled = !detail || exportingFormat !== null;
 
   return (
     <section className="rounded-md border border-line bg-panel p-5 shadow-soft">
@@ -228,18 +278,54 @@ function HistoryDetailPanel({
           </h3>
           <p className="mt-1 text-sm text-ink/60">{formatDateTime(item.analyzedAt)}</p>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:w-60">
-          <SmallMetric label="Status" value={statusLabel(item.status)} />
-          <SmallMetric
-            label="Confianca"
-            value={
-              item.primaryFindingConfidence !== null
-                ? formatPercent(item.primaryFindingConfidence)
-                : "--"
-            }
-          />
+        <div className="flex flex-col gap-3 sm:items-end">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              title="Exportar relatorio Markdown"
+              disabled={isExportDisabled}
+              onClick={() => onExportReport("markdown")}
+              className="grid h-10 w-10 place-items-center rounded-md border border-line bg-canvas text-ink shadow-soft transition hover:border-teal hover:text-teal disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {exportingFormat === "markdown" ? (
+                <RotateCw aria-hidden className="animate-spin" size={17} />
+              ) : (
+                <FileText aria-hidden size={17} />
+              )}
+            </button>
+            <button
+              type="button"
+              title="Exportar relatorio HTML"
+              disabled={isExportDisabled}
+              onClick={() => onExportReport("html")}
+              className="grid h-10 w-10 place-items-center rounded-md border border-line bg-canvas text-ink shadow-soft transition hover:border-teal hover:text-teal disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {exportingFormat === "html" ? (
+                <RotateCw aria-hidden className="animate-spin" size={17} />
+              ) : (
+                <Code2 aria-hidden size={17} />
+              )}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:w-60">
+            <SmallMetric label="Status" value={statusLabel(item.status)} />
+            <SmallMetric
+              label="Confianca"
+              value={
+                item.primaryFindingConfidence !== null
+                  ? formatPercent(item.primaryFindingConfidence)
+                  : "--"
+              }
+            />
+          </div>
         </div>
       </div>
+
+      {exportMessage ? (
+        <p className="mt-3 break-all rounded-md border border-line bg-canvas px-3 py-2 text-xs text-ink/60">
+          {exportMessage}
+        </p>
+      ) : null}
 
       {finding ? (
         <div className="mt-5 grid gap-4">
@@ -326,6 +412,13 @@ function impactLabel(impact: NonNullable<DiagnosticHistoryItem["primaryFindingIm
     medium: "Medio",
     high: "Alto",
   }[impact];
+}
+
+function reportFormatLabel(format: DiagnosticReportFormat): string {
+  return {
+    markdown: "Markdown",
+    html: "HTML",
+  }[format];
 }
 
 function formatDateTime(value: string): string {

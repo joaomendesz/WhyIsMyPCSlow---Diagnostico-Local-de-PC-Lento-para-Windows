@@ -4,7 +4,9 @@ import type {
   DiagnosticHistoryDetail,
   DiagnosticHistoryItem,
   DiagnosticProgress,
+  DiagnosticReportFormat,
   DiagnosticSummary,
+  ExportDiagnosticReportResult,
   MetricsMonitorStatus,
   MetricsSnapshot,
   ProcessGroup,
@@ -70,6 +72,11 @@ contextBridge.exposeInMainWorld("whyPcSlow", {
     list: () => ipcRenderer.invoke(IpcChannels.listHistory) as Promise<DiagnosticHistoryItem[]>,
     get: (id: string) =>
       ipcRenderer.invoke(IpcChannels.getHistory, id) as Promise<DiagnosticHistoryDetail | null>,
+    exportReport: (id: string, format: DiagnosticReportFormat) =>
+      ipcRenderer.invoke(IpcChannels.exportHistoryReport, {
+        id,
+        format,
+      }) as Promise<ExportDiagnosticReportResult>,
     clear: () =>
       ipcRenderer.invoke(IpcChannels.clearHistory) as Promise<{ deletedCount: number }>,
   },

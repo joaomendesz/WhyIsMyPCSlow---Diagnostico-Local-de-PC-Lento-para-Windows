@@ -8,7 +8,9 @@ import type {
   DiagnosticHistoryDetail,
   DiagnosticHistoryItem,
   DiagnosticProgress,
+  DiagnosticReportFormat,
   DiagnosticSummary,
+  ExportDiagnosticReportResult,
 } from "./diagnostics";
 
 export interface WhyPcSlowApi {
@@ -30,6 +32,10 @@ export interface WhyPcSlowApi {
   history: {
     list: () => Promise<DiagnosticHistoryItem[]>;
     get: (id: string) => Promise<DiagnosticHistoryDetail | null>;
+    exportReport: (
+      id: string,
+      format: DiagnosticReportFormat,
+    ) => Promise<ExportDiagnosticReportResult>;
     clear: () => Promise<{ deletedCount: number }>;
   };
 }

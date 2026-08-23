@@ -11,5 +11,6 @@ export const IpcChannels = {
   diagnosticFinished: "diagnostic:finished",
   listHistory: "history:list",
   getHistory: "history:get",
+  exportHistoryReport: "history:export-report",
   clearHistory: "history:clear",
 } as const;

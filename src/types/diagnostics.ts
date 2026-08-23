@@ -110,3 +110,11 @@ export interface DiagnosticHistoryItem {
 export interface DiagnosticHistoryDetail extends DiagnosticHistoryItem {
   summary: DiagnosticSummary;
 }
+
+export type DiagnosticReportFormat = "markdown" | "html";
+
+export interface ExportDiagnosticReportResult {
+  cancelled: boolean;
+  filePath: string | null;
+  format: DiagnosticReportFormat;
+}

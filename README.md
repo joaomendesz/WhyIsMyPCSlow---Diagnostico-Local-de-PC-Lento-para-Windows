@@ -12,9 +12,9 @@ Official GitHub repository / Repositorio oficial no GitHub:
 
 ## SEO Keywords
 
-Windows performance diagnostics, slow PC analyzer, why is my PC slow, Electron desktop app, React TypeScript desktop app, local-first diagnostics, CPU bottleneck detector, memory pressure detector, low disk space detector, Windows disk 100% diagnostic, disk I/O pressure detector, diagnostic timeline chart, process resource monitor, Windows 11 performance tool, Windows 10 performance monitor, offline PC diagnostics, deterministic diagnostic engine, SQLite diagnostic history.
+Windows performance diagnostics, slow PC analyzer, why is my PC slow, Electron desktop app, React TypeScript desktop app, local-first diagnostics, CPU bottleneck detector, memory pressure detector, low disk space detector, Windows disk 100% diagnostic, disk I/O pressure detector, diagnostic timeline chart, exportable diagnostic report, HTML diagnostic report, Markdown diagnostic report, process resource monitor, Windows 11 performance tool, Windows 10 performance monitor, offline PC diagnostics, deterministic diagnostic engine, SQLite diagnostic history.
 
-Diagnostico de desempenho Windows, analisador de PC lento, por que meu PC esta lento, aplicativo desktop Electron, React TypeScript desktop, diagnostico local-first, detector de gargalo de CPU, detector de pressao de memoria RAM, detector de pouco espaco em disco, diagnostico de disco 100% Windows, detector de pressao de I/O de disco, grafico de linha do tempo do diagnostico, monitor de processos Windows, ferramenta de desempenho Windows 11, ferramenta de desempenho Windows 10, diagnostico offline de computador lento, motor de diagnostico deterministico, historico SQLite de diagnosticos.
+Diagnostico de desempenho Windows, analisador de PC lento, por que meu PC esta lento, aplicativo desktop Electron, React TypeScript desktop, diagnostico local-first, detector de gargalo de CPU, detector de pressao de memoria RAM, detector de pouco espaco em disco, diagnostico de disco 100% Windows, detector de pressao de I/O de disco, grafico de linha do tempo do diagnostico, relatorio de diagnostico exportavel, relatorio HTML de PC lento, relatorio Markdown de desempenho Windows, monitor de processos Windows, ferramenta de desempenho Windows 11, ferramenta de desempenho Windows 10, diagnostico offline de computador lento, motor de diagnostico deterministico, historico SQLite de diagnosticos.
 
 ## Product Vision / Visao do Produto
 
@@ -70,6 +70,8 @@ Implemented in this phase:
 - Per-sample diagnostic timeline storage in SQLite.
 - Disk activity, read/write throughput and queue length collection.
 - Per-process disk I/O rates when Windows performance counters are available.
+- Exportable diagnostic reports in Markdown and HTML.
+- Report snapshot with status, evidence, recommendations, related processes and timeline metrics.
 - Automated tests for formatting, process names, aggregation and diagnostic rules.
 
 Implementado nesta fase:
@@ -97,6 +99,8 @@ Implementado nesta fase:
 - Armazenamento das amostras da linha do tempo no SQLite.
 - Coleta de atividade do disco, leitura/escrita por segundo e fila.
 - I/O de disco por processo quando os contadores de performance do Windows estao disponiveis.
+- Relatorios de diagnostico exportaveis em Markdown e HTML.
+- Snapshot do relatorio com status, evidencias, recomendacoes, processos relacionados e metricas da timeline.
 - Testes automatizados para formatacao, nomes de processos, agregacao e regras.
 
 ## Tech Stack / Tecnologias
@@ -226,6 +230,7 @@ Completed diagnostics are saved automatically in a local SQLite database stored 
 
 - List diagnostic sessions.
 - Open one diagnostic detail.
+- Export one diagnostic report as Markdown or HTML through a native save dialog.
 - Clear local history.
 
 Each saved session stores:
@@ -245,6 +250,7 @@ Os diagnosticos concluidos sao salvos automaticamente em um banco SQLite local d
 
 - Listar sessoes de diagnostico.
 - Abrir o detalhe de uma sessao.
+- Exportar uma sessao como relatorio Markdown ou HTML pelo dialogo nativo de salvar.
 - Limpar o historico local.
 
 Cada sessao salva armazena:
@@ -259,6 +265,42 @@ Cada sessao salva armazena:
 - Versao do motor.
 - JSON completo do resumo diagnostico.
 - Linhas de timeline por amostra para filtros, exportacoes e comparacoes futuras.
+
+## Exportable Reports / Relatorios Exportaveis
+
+WhyIsMyPCSlow can export a completed diagnostic session from local history as:
+
+- Markdown (`.md`) for GitHub issues, support notes, documentation and changelogs.
+- HTML (`.html`) for browser viewing, printing, sharing with technicians or attaching to a support ticket.
+
+Each report includes:
+
+- Diagnostic status.
+- Analysis date, duration, sample count and engine version.
+- Main finding with category, impact and confidence.
+- Evidence table.
+- Related CPU, memory and disk process contributors.
+- Recommendations written in plain language.
+- Secondary findings and healthy checks.
+- Timeline snapshot with CPU, RAM, disk activity, disk throughput, disk queue and system drive free space.
+- Privacy note explaining that the report is generated from local SQLite history.
+
+O WhyIsMyPCSlow consegue exportar uma sessao concluida do historico local como:
+
+- Markdown (`.md`) para issues no GitHub, notas de suporte, documentacao e changelogs.
+- HTML (`.html`) para abrir no navegador, imprimir, compartilhar com tecnicos ou anexar em um ticket de suporte.
+
+Cada relatorio inclui:
+
+- Status do diagnostico.
+- Data da analise, duracao, numero de amostras e versao do motor.
+- Finding principal com categoria, impacto e confianca.
+- Tabela de evidencias.
+- Processos relacionados que contribuiram com CPU, memoria e disco.
+- Recomendacoes em linguagem simples.
+- Achados secundarios e checagens saudaveis.
+- Snapshot da timeline com CPU, RAM, atividade do disco, throughput de disco, fila do disco e espaco livre no disco do sistema.
+- Nota de privacidade explicando que o relatorio e gerado a partir do historico SQLite local.
 
 ## Diagnostic Rules v1 / Regras de Diagnostico v1
 
@@ -370,6 +412,7 @@ The preload exposes:
 - `window.whyPcSlow.diagnostics.onFinished`
 - `window.whyPcSlow.history.list`
 - `window.whyPcSlow.history.get`
+- `window.whyPcSlow.history.exportReport`
 - `window.whyPcSlow.history.clear`
 
 ## Metric Sources / Fontes de Metricas
@@ -421,6 +464,8 @@ src-electron/
     manager.ts
     thresholds.ts
     timeline.ts
+  reports/
+    diagnosticReport.ts
   services/
     metricsService.ts
     processNames.ts
@@ -488,6 +533,7 @@ Current automated coverage:
 - SQLite timeline sample persistence.
 - Byte formatting for MB, GB and TB.
 - Process memory unit normalization from KiB to bytes.
+- Diagnostic report builder for Markdown and HTML exports.
 
 Cobertura automatizada atual:
 
@@ -503,6 +549,7 @@ Cobertura automatizada atual:
 - Persistencia das amostras da timeline no SQLite.
 - Formatacao de bytes para MB, GB e TB.
 - Normalizacao de memoria de processos de KiB para bytes.
+- Gerador de relatorios de diagnostico para exportacao em Markdown e HTML.
 
 ## Example Diagnostic Output / Exemplo de Resultado
 
@@ -556,25 +603,25 @@ Recomendacoes:
 
 Next recommended slices:
 
-1. Add exportable diagnostic reports with timeline snapshots.
-2. Add search and filters to local history.
-3. Add startup apps and power plan collectors.
-4. Improve process grouping with parent process context.
-5. Add timeline comparison between diagnostic sessions.
-6. Add disk model/type context for HDD vs SSD explanations.
-7. Harden IPC payload validation with Zod.
-8. Build and test a signed Windows installer.
+1. Add search and filters to local history.
+2. Add startup apps and power plan collectors.
+3. Improve process grouping with parent process context.
+4. Add timeline comparison between diagnostic sessions.
+5. Add disk model/type context for HDD vs SSD explanations.
+6. Harden IPC payload validation with Zod.
+7. Build and test a signed Windows installer.
+8. Add a printable PDF export built from the HTML report.
 
 Proximas fatias recomendadas:
 
-1. Adicionar relatorios exportaveis com capturas da timeline.
-2. Adicionar busca e filtros no historico local.
-3. Adicionar coletores de inicializacao e plano de energia.
-4. Melhorar agrupamento de processos com contexto de processo pai.
-5. Adicionar comparacao de timeline entre sessoes de diagnostico.
-6. Adicionar contexto de tipo/modelo de disco para explicar HDD vs SSD.
-7. Reforcar validacao dos payloads IPC com Zod.
-8. Criar e testar um installer Windows assinado.
+1. Adicionar busca e filtros no historico local.
+2. Adicionar coletores de inicializacao e plano de energia.
+3. Melhorar agrupamento de processos com contexto de processo pai.
+4. Adicionar comparacao de timeline entre sessoes de diagnostico.
+5. Adicionar contexto de tipo/modelo de disco para explicar HDD vs SSD.
+6. Reforcar validacao dos payloads IPC com Zod.
+7. Criar e testar um installer Windows assinado.
+8. Adicionar exportacao PDF imprimivel a partir do relatorio HTML.
 
 ## Project Identity / Identidade do Projeto
 
