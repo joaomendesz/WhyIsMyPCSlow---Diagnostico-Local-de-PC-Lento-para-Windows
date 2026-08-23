@@ -7,6 +7,7 @@ import {
   subscribeDiagnosticFinished,
   subscribeDiagnosticProgress,
 } from "../services/diagnostics";
+import { DiagnosticTimelineChart } from "../components/DiagnosticTimelineChart";
 import type {
   DiagnosticFinding,
   DiagnosticProgress,
@@ -200,17 +201,20 @@ function SummaryPanel({
 }) {
   if (summary.status === "healthy") {
     return (
-      <section className="rounded-md border border-line bg-panel p-5 shadow-soft">
-        <div className="flex items-center gap-3">
-          <CheckCircle2 aria-hidden className="text-mint" size={24} />
-          <div>
-            <h3 className="text-lg font-semibold">Nenhum gargalo forte encontrado</h3>
-            <p className="mt-1 text-sm text-ink/60">
-              A analise nao encontrou evidencias suficientes para apontar CPU, RAM ou disco como
-              causa principal.
-            </p>
+      <section className="grid gap-4">
+        <article className="rounded-md border border-line bg-panel p-5 shadow-soft">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 aria-hidden className="text-mint" size={24} />
+            <div>
+              <h3 className="text-lg font-semibold">Nenhum gargalo forte encontrado</h3>
+              <p className="mt-1 text-sm text-ink/60">
+                A analise nao encontrou evidencias suficientes para apontar CPU, RAM ou disco como
+                causa principal.
+              </p>
+            </div>
           </div>
-        </div>
+        </article>
+        <DiagnosticTimelineChart samples={summary.timeline} />
         <PositiveChecks summary={summary} />
       </section>
     );
@@ -221,6 +225,7 @@ function SummaryPanel({
       {findings.map((finding, index) => (
         <FindingCard key={finding.id} finding={finding} isPrimary={index === 0} />
       ))}
+      <DiagnosticTimelineChart samples={summary.timeline} />
       <PositiveChecks summary={summary} />
     </section>
   );

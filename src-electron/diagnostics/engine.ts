@@ -12,6 +12,7 @@ import {
   type ProcessAggregate,
 } from "./aggregator";
 import { DIAGNOSTIC_ENGINE_VERSION, DiagnosticThresholds } from "./thresholds";
+import { buildDiagnosticTimeline } from "./timeline";
 
 export function runDiagnosticEngine(samples: MetricsSnapshot[]): DiagnosticSummary {
   const aggregates = buildDiagnosticAggregates(samples);
@@ -39,6 +40,7 @@ export function runDiagnosticEngine(samples: MetricsSnapshot[]): DiagnosticSumma
     sampleCount: aggregates.sampleCount,
     durationSeconds: aggregates.durationSeconds,
     engineVersion: DIAGNOSTIC_ENGINE_VERSION,
+    timeline: buildDiagnosticTimeline(samples),
   };
 }
 

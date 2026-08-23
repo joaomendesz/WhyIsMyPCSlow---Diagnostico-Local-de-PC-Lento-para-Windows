@@ -36,6 +36,7 @@ export class HistoryRepository {
     const findings = primaryFinding
       ? [primaryFinding, ...summary.secondaryFindings]
       : summary.secondaryFindings;
+    const timeline = summary.timeline ?? [];
 
     const insertSession = this.database.prepare(`
       INSERT INTO diagnostic_sessions (
@@ -71,6 +72,25 @@ export class HistoryRepository {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    const insertSample = this.database.prepare(`
+      INSERT INTO diagnostic_samples (
+        session_id,
+        sample_index,
+        timestamp,
+        offset_seconds,
+        cpu_usage_percent,
+        memory_used_percent,
+        memory_available_bytes,
+        system_drive_free_percent,
+        system_drive_available_bytes,
+        top_cpu_process_name,
+        top_cpu_process_percent,
+        top_memory_process_name,
+        top_memory_process_bytes
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
     this.database.exec("BEGIN IMMEDIATE TRANSACTION");
 
     try {
@@ -101,6 +121,24 @@ export class HistoryRepository {
           JSON.stringify(finding.evidence),
           JSON.stringify(finding.recommendations),
           JSON.stringify(finding.relatedProcesses),
+        );
+      });
+
+      timeline.forEach((sample, index) => {
+        insertSample.run(
+          id,
+          index,
+          sample.timestamp,
+          sample.offsetSeconds,
+          sample.cpuUsagePercent,
+          sample.memoryUsedPercent,
+          sample.memoryAvailableBytes,
+          sample.systemDriveFreePercent,
+          sample.systemDriveAvailableBytes,
+          sample.topCpuProcessName,
+          sample.topCpuProcessPercent,
+          sample.topMemoryProcessName,
+          sample.topMemoryProcessBytes,
         );
       });
 
@@ -169,7 +207,7 @@ export class HistoryRepository {
 
     return {
       ...toHistoryItem(row),
-      summary: JSON.parse(row.summary_json) as DiagnosticSummary,
+      summary: parseSummary(row.summary_json),
     };
   }
 
@@ -180,6 +218,7 @@ export class HistoryRepository {
       const countRow = this.database
         .prepare("SELECT COUNT(*) AS count FROM diagnostic_sessions")
         .get() as unknown as { count: number };
+      this.database.prepare("DELETE FROM diagnostic_samples").run();
       this.database.prepare("DELETE FROM diagnostic_findings").run();
       this.database.prepare("DELETE FROM diagnostic_sessions").run();
       this.database.exec("COMMIT");
@@ -234,6 +273,27 @@ export class HistoryRepository {
 
       CREATE INDEX IF NOT EXISTS idx_diagnostic_findings_session_id
       ON diagnostic_findings (session_id, rank);
+
+      CREATE TABLE IF NOT EXISTS diagnostic_samples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        sample_index INTEGER NOT NULL,
+        timestamp INTEGER NOT NULL,
+        offset_seconds REAL NOT NULL,
+        cpu_usage_percent REAL NOT NULL,
+        memory_used_percent REAL NOT NULL,
+        memory_available_bytes INTEGER NOT NULL,
+        system_drive_free_percent REAL,
+        system_drive_available_bytes INTEGER,
+        top_cpu_process_name TEXT,
+        top_cpu_process_percent REAL,
+        top_memory_process_name TEXT,
+        top_memory_process_bytes INTEGER,
+        FOREIGN KEY (session_id) REFERENCES diagnostic_sessions(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_diagnostic_samples_session_id
+      ON diagnostic_samples (session_id, sample_index);
     `);
   }
 }
@@ -260,6 +320,15 @@ function toHistoryItem(row: SessionRow): DiagnosticHistoryItem {
     durationSeconds: row.duration_seconds,
     engineVersion: row.engine_version,
     createdAt: row.created_at,
+  };
+}
+
+function parseSummary(summaryJson: string): DiagnosticSummary {
+  const summary = JSON.parse(summaryJson) as DiagnosticSummary;
+
+  return {
+    ...summary,
+    timeline: Array.isArray(summary.timeline) ? summary.timeline : [],
   };
 }
 

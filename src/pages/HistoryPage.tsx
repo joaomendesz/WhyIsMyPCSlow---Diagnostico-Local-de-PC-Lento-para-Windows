@@ -1,5 +1,6 @@
 import { CalendarClock, Database, RotateCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { DiagnosticTimelineChart } from "../components/DiagnosticTimelineChart";
 import {
   clearDiagnosticHistory,
   getDiagnosticHistoryDetail,
@@ -293,6 +294,8 @@ function HistoryDetailPanel({
           Esta sessao nao registrou um gargalo principal.
         </p>
       )}
+
+      <DiagnosticTimelineChart samples={summary?.timeline} framed={false} />
     </section>
   );
 }

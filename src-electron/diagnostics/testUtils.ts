@@ -1,11 +1,13 @@
-import type { MetricsSnapshot } from "../types";
+import type { MetricsSnapshot, ProcessGroup } from "../types";
 
 interface SampleOptions {
+  timestamp?: number;
   cpu?: number;
   memoryUsed?: number;
   availableBytes?: number;
   freePercent?: number;
   availableStorageBytes?: number;
+  processGroups?: ProcessGroup[];
 }
 
 const TOTAL_MEMORY_BYTES = 8 * 1024 ** 3;
@@ -18,7 +20,7 @@ export function createSample(options: SampleOptions = {}): MetricsSnapshot {
   const freePercent = options.freePercent ?? 35;
 
   return {
-    timestamp: Date.now(),
+    timestamp: options.timestamp ?? Date.now(),
     cpu: {
       totalUsagePercent: options.cpu ?? 30,
       logicalProcessors: 8,
@@ -32,7 +34,7 @@ export function createSample(options: SampleOptions = {}): MetricsSnapshot {
       availableBytes,
       usedPercent: memoryUsed,
     },
-    processGroups: [
+    processGroups: options.processGroups ?? [
       {
         key: "chrome.exe",
         displayName: "Google Chrome",

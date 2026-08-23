@@ -6,11 +6,15 @@ WhyIsMyPCSlow is a local-first desktop application for Windows 10 and Windows 11
 
 WhyIsMyPCSlow e um aplicativo desktop local-first para Windows 10 e Windows 11. Ele monitora CPU, memoria, armazenamento e processos, depois executa um motor de diagnostico deterministico para explicar por que um PC pode estar lento.
 
+Official GitHub repository / Repositorio oficial no GitHub:
+
+[https://github.com/joaomendesz/PC-Migration-Assistant](https://github.com/joaomendesz/PC-Migration-Assistant)
+
 ## SEO Keywords
 
-Windows performance diagnostics, slow PC analyzer, why is my PC slow, Electron desktop app, React TypeScript desktop app, local-first diagnostics, CPU bottleneck detector, memory pressure detector, low disk space detector, process resource monitor, Windows 11 performance tool, Windows 10 performance monitor, offline PC diagnostics, deterministic diagnostic engine.
+Windows performance diagnostics, slow PC analyzer, why is my PC slow, Electron desktop app, React TypeScript desktop app, local-first diagnostics, CPU bottleneck detector, memory pressure detector, low disk space detector, diagnostic timeline chart, process resource monitor, Windows 11 performance tool, Windows 10 performance monitor, offline PC diagnostics, deterministic diagnostic engine, SQLite diagnostic history, Windows PC migration assistant.
 
-Diagnostico de desempenho Windows, analisador de PC lento, por que meu PC esta lento, aplicativo desktop Electron, React TypeScript desktop, diagnostico local-first, detector de gargalo de CPU, detector de pressao de memoria RAM, detector de pouco espaco em disco, monitor de processos Windows, ferramenta de desempenho Windows 11, ferramenta de desempenho Windows 10, diagnostico offline de computador lento, motor de diagnostico deterministico.
+Diagnostico de desempenho Windows, analisador de PC lento, por que meu PC esta lento, aplicativo desktop Electron, React TypeScript desktop, diagnostico local-first, detector de gargalo de CPU, detector de pressao de memoria RAM, detector de pouco espaco em disco, grafico de linha do tempo do diagnostico, monitor de processos Windows, ferramenta de desempenho Windows 11, ferramenta de desempenho Windows 10, diagnostico offline de computador lento, motor de diagnostico deterministico, historico SQLite de diagnosticos, assistente de migracao de PC Windows.
 
 ## Product Vision / Visao do Produto
 
@@ -61,6 +65,8 @@ Implemented in this phase:
 - Human-readable findings, evidence, impact, confidence and recommendations.
 - Local SQLite history for completed diagnostics.
 - History page with previous sessions, primary findings and evidence details.
+- Diagnostic timeline charts for CPU, memory and system drive free space.
+- Per-sample diagnostic timeline storage in SQLite.
 - Automated tests for formatting, process names, aggregation and diagnostic rules.
 
 Implementado nesta fase:
@@ -83,6 +89,8 @@ Implementado nesta fase:
 - Findings com texto humano, evidencias, impacto, confianca e recomendacoes.
 - Historico local em SQLite para diagnosticos concluidos.
 - Pagina de historico com sessoes anteriores, findings principais e detalhes de evidencias.
+- Graficos de linha do tempo do diagnostico para CPU, memoria e espaco livre do disco do sistema.
+- Armazenamento das amostras da linha do tempo no SQLite.
 - Testes automatizados para formatacao, nomes de processos, agregacao e regras.
 
 ## Tech Stack / Tecnologias
@@ -114,6 +122,8 @@ DiagnosticManager
 Sample Aggregator
       |
 Diagnostic Engine v1
+      |
+Diagnostic Timeline Builder
       |
 Findings + Evidence + Recommendations
       |
@@ -170,6 +180,32 @@ RAM at 91%
 = stronger memory pressure evidence
 ```
 
+## Diagnostic Timeline / Linha do Tempo do Diagnostico
+
+Every completed diagnostic now includes a chart-ready timeline. The app records one point per collected sample with:
+
+- CPU usage percentage.
+- Memory usage percentage.
+- Available physical memory.
+- Free space percentage on the system drive.
+- Available bytes on the system drive.
+- Top CPU process group at that moment.
+- Top memory process group at that moment.
+
+Cada diagnostico concluido agora inclui uma linha do tempo pronta para graficos. O app registra um ponto por amostra coletada com:
+
+- Percentual de uso de CPU.
+- Percentual de uso de memoria.
+- Memoria fisica disponivel.
+- Percentual livre no disco do sistema.
+- Bytes disponiveis no disco do sistema.
+- Grupo de processo com maior CPU naquele momento.
+- Grupo de processo com maior memoria naquele momento.
+
+This makes the diagnosis easier to trust: users can see if a bottleneck was sustained, temporary or correlated with another resource.
+
+Isso torna o diagnostico mais confiavel: o usuario consegue ver se o gargalo foi sustentado, temporario ou correlacionado com outro recurso.
+
 ## Local History / Historico Local
 
 Completed diagnostics are saved automatically in a local SQLite database stored under Electron's `userData` directory. The renderer never receives a generic SQL API. It can only call safe history commands:
@@ -189,6 +225,7 @@ Each saved session stores:
 - Duration.
 - Engine version.
 - Full diagnostic summary JSON.
+- Per-sample timeline rows for future filters, exports and comparisons.
 
 Os diagnosticos concluidos sao salvos automaticamente em um banco SQLite local dentro do diretorio `userData` do Electron. O renderer nunca recebe uma API SQL generica. Ele so pode chamar comandos seguros de historico:
 
@@ -207,6 +244,7 @@ Cada sessao salva armazena:
 - Duracao.
 - Versao do motor.
 - JSON completo do resumo diagnostico.
+- Linhas de timeline por amostra para filtros, exportacoes e comparacoes futuras.
 
 ## Diagnostic Rules v1 / Regras de Diagnostico v1
 
@@ -329,6 +367,7 @@ Se a coleta de processos nao retornar linhas em uma maquina Windows, o app usa u
 ```text
 src/
   components/
+    DiagnosticTimelineChart.tsx
   pages/
   services/
   stores/
@@ -343,6 +382,7 @@ src-electron/
     engine.ts
     manager.ts
     thresholds.ts
+    timeline.ts
   services/
     metricsService.ts
     processNames.ts
@@ -405,6 +445,8 @@ Current automated coverage:
 - Memory pressure evidence principle.
 - Low disk space rule.
 - SQLite history repository.
+- Diagnostic timeline builder.
+- SQLite timeline sample persistence.
 
 Cobertura automatizada atual:
 
@@ -415,6 +457,8 @@ Cobertura automatizada atual:
 - Principio de evidencias para pressao de memoria.
 - Regra de pouco espaco em disco.
 - Repositorio SQLite de historico.
+- Construtor da linha do tempo diagnostica.
+- Persistencia das amostras da timeline no SQLite.
 
 ## Example Diagnostic Output / Exemplo de Resultado
 
@@ -466,23 +510,23 @@ Recomendacoes:
 
 Next recommended slices:
 
-1. Add CPU and memory timeline charts for diagnostic sessions.
-2. Add disk activity and process I/O metrics.
-3. Add startup apps and power plan collectors.
-4. Improve process grouping with parent process context.
-5. Add exportable diagnostic reports.
-6. Add search and filters to local history.
+1. Add disk activity and process I/O metrics.
+2. Add exportable diagnostic reports with timeline snapshots.
+3. Add search and filters to local history.
+4. Add startup apps and power plan collectors.
+5. Improve process grouping with parent process context.
+6. Add timeline comparison between diagnostic sessions.
 7. Harden IPC payload validation with Zod.
 8. Build and test a signed Windows installer.
 
 Proximas fatias recomendadas:
 
-1. Adicionar graficos de linha de CPU e memoria para sessoes de diagnostico.
-2. Adicionar atividade de disco e I/O por processo.
-3. Adicionar coletores de inicializacao e plano de energia.
-4. Melhorar agrupamento de processos com contexto de processo pai.
-5. Adicionar relatorios exportaveis.
-6. Adicionar busca e filtros no historico local.
+1. Adicionar atividade de disco e I/O por processo.
+2. Adicionar relatorios exportaveis com capturas da timeline.
+3. Adicionar busca e filtros no historico local.
+4. Adicionar coletores de inicializacao e plano de energia.
+5. Melhorar agrupamento de processos com contexto de processo pai.
+6. Adicionar comparacao de timeline entre sessoes de diagnostico.
 7. Reforcar validacao dos payloads IPC com Zod.
 8. Criar e testar um installer Windows assinado.
 

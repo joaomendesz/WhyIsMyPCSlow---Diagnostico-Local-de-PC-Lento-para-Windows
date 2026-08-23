@@ -114,6 +114,20 @@ export interface DiagnosticCheck {
   detail: string;
 }
 
+export interface DiagnosticTimelineSample {
+  timestamp: number;
+  offsetSeconds: number;
+  cpuUsagePercent: number;
+  memoryUsedPercent: number;
+  memoryAvailableBytes: number;
+  systemDriveFreePercent: number | null;
+  systemDriveAvailableBytes: number | null;
+  topCpuProcessName: string | null;
+  topCpuProcessPercent: number | null;
+  topMemoryProcessName: string | null;
+  topMemoryProcessBytes: number | null;
+}
+
 export type DiagnosticSummaryStatus = "healthy" | "issuesFound" | "inconclusive";
 
 export interface DiagnosticSummary {
@@ -125,6 +139,7 @@ export interface DiagnosticSummary {
   sampleCount: number;
   durationSeconds: number;
   engineVersion: string;
+  timeline: DiagnosticTimelineSample[];
 }
 
 export interface DiagnosticProgress {
