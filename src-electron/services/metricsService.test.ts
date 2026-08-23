@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   parsePowerShellDiskActivity,
   parsePowerShellProcessDiskRates,
-  parseWindowsDiskMetrics,
   processMemoryToBytes,
 } from "./metricsService";
 
@@ -61,36 +60,5 @@ describe("parsePowerShellProcessDiskRates", () => {
       writeBytesPerSecond: 2048,
     });
     expect(rates.has(0)).toBe(false);
-  });
-});
-
-describe("parseWindowsDiskMetrics", () => {
-  it("parses combined disk and process metrics from one PowerShell payload", () => {
-    const metrics = parseWindowsDiskMetrics(
-      JSON.stringify({
-        disk: {
-          activePercent: 74,
-          readBytesPerSecond: 4096,
-          writeBytesPerSecond: 2048,
-          queueLength: 1,
-          readsPerSecond: 5,
-          writesPerSecond: 3,
-        },
-        processes: [
-          {
-            pid: 321,
-            readBytesPerSecond: 1024,
-            writeBytesPerSecond: 512,
-          },
-        ],
-      }),
-    );
-
-    expect(metrics.diskActivity.activePercent).toBe(74);
-    expect(metrics.diskActivity.totalBytesPerSecond).toBe(6144);
-    expect(metrics.processDiskRates.get(321)).toEqual({
-      readBytesPerSecond: 1024,
-      writeBytesPerSecond: 512,
-    });
   });
 });

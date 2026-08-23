@@ -62,19 +62,9 @@ interface PowerShellProcessDiskInfo {
   writeBytesPerSecond?: unknown;
 }
 
-interface PowerShellWindowsDiskMetricsInfo {
-  disk?: unknown;
-  processes?: unknown;
-}
-
 export interface ProcessDiskRate {
   readBytesPerSecond: number;
   writeBytesPerSecond: number;
-}
-
-interface DiskMetrics {
-  diskActivity: DiskActivitySample;
-  processDiskRates: Map<number, ProcessDiskRate>;
 }
 
 export type ProcessMemoryUnit = "bytes" | "kib";
@@ -82,6 +72,9 @@ export type ProcessMemoryUnit = "bytes" | "kib";
 export class MetricsService {
   private cpuInfo: CpuInfo | null = null;
   private processCache: { groups: ProcessGroup[]; expiresAt: number } | null = null;
+  private processDiskRateCache: { rates: Map<number, ProcessDiskRate>; expiresAt: number } | null =
+    null;
+  private processDiskRateRefreshInFlight = false;
   private previousProcessCpu = new Map<number, { cpuTimeSeconds: number; timestamp: number }>();
   private timer: NodeJS.Timeout | null = null;
   private streamInFlight = false;
@@ -113,25 +106,23 @@ export class MetricsService {
       memory,
       processes,
       storageVolumes,
-      diskMetrics,
+      diskActivity,
     ] = await Promise.all([
       si.currentLoad(),
       this.getCpuInfo(),
       si.mem(),
       si.processes(),
       this.getStorageVolumes(),
-      this.getDiskMetrics(),
+      this.getDiskActivity(),
     ]);
+    const processDiskRates = this.getCachedProcessDiskRates();
 
     return {
       timestamp: Date.now(),
       cpu: this.toCpuSample(currentLoad.currentLoad, cpuInfo),
       memory: this.toMemorySample(memory.total, memory.available),
-      diskActivity: diskMetrics.diskActivity,
-      processGroups: await this.getProcessGroups(
-        processes.list,
-        diskMetrics.processDiskRates,
-      ),
+      diskActivity,
+      processGroups: await this.getProcessGroups(processes.list, processDiskRates),
       storageVolumes,
     };
   }
@@ -247,15 +238,39 @@ export class MetricsService {
     }
   }
 
-  private async getDiskMetrics(): Promise<DiskMetrics> {
+  private async getDiskActivity(): Promise<DiskActivitySample> {
     if (process.platform === "win32") {
-      return collectWindowsDiskMetricsWithPowerShell();
+      return collectDiskActivityWithPowerShell();
     }
 
-    return {
-      diskActivity: await collectDiskActivityWithSystemInformation(),
-      processDiskRates: new Map(),
-    };
+    return collectDiskActivityWithSystemInformation();
+  }
+
+  private getCachedProcessDiskRates(): Map<number, ProcessDiskRate> {
+    if (process.platform !== "win32") {
+      return new Map();
+    }
+
+    const now = Date.now();
+
+    if (
+      (!this.processDiskRateCache || this.processDiskRateCache.expiresAt <= now) &&
+      !this.processDiskRateRefreshInFlight
+    ) {
+      this.processDiskRateRefreshInFlight = true;
+      void collectProcessDiskRatesWithPowerShell()
+        .then((rates) => {
+          this.processDiskRateCache = {
+            rates,
+            expiresAt: Date.now() + 10_000,
+          };
+        })
+        .finally(() => {
+          this.processDiskRateRefreshInFlight = false;
+        });
+    }
+
+    return this.processDiskRateCache?.rates ?? new Map();
   }
 
   private async getProcessGroups(
@@ -526,39 +541,20 @@ async function collectDiskActivityWithSystemInformation(): Promise<DiskActivityS
   };
 }
 
-async function collectWindowsDiskMetricsWithPowerShell(): Promise<DiskMetrics> {
+async function collectDiskActivityWithPowerShell(): Promise<DiskActivitySample> {
   const script = `
 $ErrorActionPreference = 'Stop'
 $disk = Get-CimInstance -ClassName Win32_PerfFormattedData_PerfDisk_PhysicalDisk -Filter "Name='_Total'" | Select-Object -First 1
 if ($null -eq $disk) {
   throw 'Disk performance counters unavailable.'
 }
-$processRows = @()
-try {
-  $processRows = @(
-    Get-CimInstance -ClassName Win32_PerfFormattedData_PerfProc_Process |
-      Where-Object { $_.IDProcess -gt 0 -and $_.Name -ne '_Total' -and $_.Name -ne 'Idle' } |
-      ForEach-Object {
-        [PSCustomObject]@{
-          pid = [int]$_.IDProcess
-          readBytesPerSecond = [double]$_.IOReadBytesPersec
-          writeBytesPerSecond = [double]$_.IOWriteBytesPersec
-        }
-      }
-  )
-} catch {
-  $processRows = @()
-}
 [PSCustomObject]@{
-  disk = [PSCustomObject]@{
-    activePercent = [double]$disk.PercentDiskTime
-    readBytesPerSecond = [double]$disk.DiskReadBytesPersec
-    writeBytesPerSecond = [double]$disk.DiskWriteBytesPersec
-    queueLength = [double]$disk.CurrentDiskQueueLength
-    readsPerSecond = [double]$disk.DiskReadsPersec
-    writesPerSecond = [double]$disk.DiskWritesPersec
-  }
-  processes = $processRows
+  activePercent = [double]$disk.PercentDiskTime
+  readBytesPerSecond = [double]$disk.DiskReadBytesPersec
+  writeBytesPerSecond = [double]$disk.DiskWriteBytesPersec
+  queueLength = [double]$disk.CurrentDiskQueueLength
+  readsPerSecond = [double]$disk.DiskReadsPersec
+  writesPerSecond = [double]$disk.DiskWritesPersec
 } | ConvertTo-Json -Compress -Depth 3
 `;
 
@@ -573,32 +569,11 @@ try {
       },
     );
 
-    return parseWindowsDiskMetrics(stdout);
+    return parsePowerShellDiskActivity(stdout);
   } catch (error) {
-    console.warn("Failed to collect disk metrics through PowerShell", error);
-    return {
-      diskActivity: unavailableDiskActivity(),
-      processDiskRates: new Map(),
-    };
+    console.warn("Failed to collect disk activity metrics through PowerShell", error);
+    return unavailableDiskActivity();
   }
-}
-
-export function parseWindowsDiskMetrics(stdout: string): DiskMetrics {
-  const trimmed = stdout.trim();
-
-  if (!trimmed) {
-    return {
-      diskActivity: unavailableDiskActivity(),
-      processDiskRates: new Map(),
-    };
-  }
-
-  const parsed = JSON.parse(trimmed) as PowerShellWindowsDiskMetricsInfo;
-
-  return {
-    diskActivity: toPowerShellDiskActivity(parsed.disk),
-    processDiskRates: toProcessDiskRates(parsed.processes),
-  };
 }
 
 export function parsePowerShellDiskActivity(stdout: string): DiskActivitySample {
@@ -621,6 +596,39 @@ export function parsePowerShellProcessDiskRates(stdout: string): Map<number, Pro
 
   const parsed: unknown = JSON.parse(trimmed);
   return toProcessDiskRates(parsed);
+}
+
+async function collectProcessDiskRatesWithPowerShell(): Promise<Map<number, ProcessDiskRate>> {
+  const script = `
+$ErrorActionPreference = 'Stop'
+Get-CimInstance -ClassName Win32_PerfFormattedData_PerfProc_Process |
+  Where-Object { $_.IDProcess -gt 0 -and $_.Name -ne '_Total' -and $_.Name -ne 'Idle' } |
+  ForEach-Object {
+    [PSCustomObject]@{
+      pid = [int]$_.IDProcess
+      readBytesPerSecond = [double]$_.IOReadBytesPersec
+      writeBytesPerSecond = [double]$_.IOWriteBytesPersec
+    }
+  } |
+  ConvertTo-Json -Compress -Depth 3
+`;
+
+  try {
+    const { stdout } = await execFileAsync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+      {
+        maxBuffer: 3 * 1024 * 1024,
+        timeout: 8_000,
+        windowsHide: true,
+      },
+    );
+
+    return parsePowerShellProcessDiskRates(stdout);
+  } catch (error) {
+    console.warn("Failed to collect per-process disk metrics through PowerShell", error);
+    return new Map();
+  }
 }
 
 function toPowerShellDiskActivity(value: unknown): DiskActivitySample {
